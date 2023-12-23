@@ -2,3 +2,5 @@
 /nohup.out
 /LOG.log
 /.env.secret
+/.venv/
+/venv/

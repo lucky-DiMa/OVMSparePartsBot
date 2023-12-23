@@ -1,6 +1,5 @@
 from datetime import datetime
-from pprint import pprint
-
+from aiogram.enums import ChatAction
 from aiogram import types, F
 from classes import Query, SparePart, User, Photo, Brand
 from config import text_of_contacts_message
@@ -42,7 +41,7 @@ async def callback_for_goto_sp_page_buttons(query: types.CallbackQuery):
         return
     if new_page_n > result.sp_pages_count:
         new_page_n = result.sp_pages_count
-    await query.message.edit_reply_markup(result.sp_pages_keyboard(new_page_n))
+    await query.message.edit_reply_markup(reply_markup=result.sp_pages_keyboard(new_page_n))
 
 
 # async def callback_for_back_to_results_btn(query: types.CallbackQuery):
@@ -67,7 +66,7 @@ async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
     article = query.data.split()[-2]
     brand = Brand.get_by_uid(query.data.split('"')[-2])
     await query.answer()
-    await query.message.answer_chat_action('typing')
+    await bot.send_chat_action(query.from_user.id, ChatAction.TYPING)
     sp = SparePart.get_by_article(article, brand.uid)
     search_query = query.message.text.split('"')[1]
     photos = list(map(Photo, sp.photos))
@@ -198,7 +197,7 @@ async def callback_for_goto_brands_page_buttons(query: types.CallbackQuery):
         return
     if new_page_n > result.brands_pages_count:
         new_page_n = Brand.pages_count()
-    await query.message.edit_reply_markup(result.brands_pages_keyboard(new_page_n))
+    await query.message.edit_reply_markup(reply_markup=result.brands_pages_keyboard(new_page_n))
 
 
 async def not_registered(query: types.CallbackQuery):

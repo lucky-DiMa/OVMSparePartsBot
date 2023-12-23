@@ -68,10 +68,6 @@ class User:
         mongo_db["Users"].update_one({"id": self.id}, {"$set": {"previous_query": previous_query}})
 
     @classmethod
-    def is_id_registered(cls, id_: int):
-        return bool(cls.get_by_id(id_))
-
-    @classmethod
     def reg(cls, tg_id: int):
         """
         :rtype :User
@@ -108,4 +104,8 @@ class User:
     @staticmethod
     def delete_all():
         mongo_db["Users"].drop()
+
+    @classmethod
+    def exists_by_id(cls, tg_id: int):
+        return mongo_db["Users"].find_one({"id": tg_id}, ["id"]) is not None
     
