@@ -13,28 +13,28 @@ def get_parts_by_text(text: str, brand_id: str | None = None):
             "text": text,
             "app": "WH-mobile",
             "useruid": "64b432f6-705a-11ec-9171-001b21e4770b",
-            "brandid": brand_id,
+            "uid": brand_id,
             "operation": "searchitem2",
             "organization": "ООО \"ОМ партс\""}
     if brand_id is None:
-        json.pop("brandid")
+        json.pop("uid")
     response = requests.post('http://rdp.ovm.group:33900', json=json)
     return loads(response.text)
 
 
-def get_part_by_article(article: str | int, brand_id: str | None = None):
+def get_part_by_code(code: str | int, brand_id: str | None = None):
     """
     :rtype :dict
     """
     json = {"operation": "scan2",
-            "shk": article,
+            "shk": code,
             "app": "WH-mobile",
             "organization": "ООО \"ОМ партс\"",
             "useruid": "64b432f6-705a-11ec-9171-001b21e4770b",
-            "brandid": brand_id,
+            "uid": brand_id,
             "warehouse": "ОМ Партс Мельникова*"}
     if brand_id is None:
-        json.pop("brandid")
+        json.pop("uid")
     response = requests.post('http://rdp.ovm.group:33900', json=json)
     return loads(response.text)
 
@@ -62,4 +62,4 @@ def get_brands():
 if __name__ == '__main__':
     # pprint(get_brands())
     pprint(get_parts_by_text(input('TEXT: ')))
-    # pprint(get_part_by_article(input('ARTICLE: '), input('B_ID: ')))
+    # pprint(get_part_by_code(input('code: '), input('B_ID: ')))

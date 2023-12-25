@@ -4,6 +4,8 @@ from datetime import datetime
 from random import randint
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from icecream import ic
+
 from config import BY_WEBHOOK, BASE_WEBHOOK_URL
 from create_bot import dp, bot
 from register_handlers import register_handlers
@@ -44,7 +46,8 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename='LOG.log')
-    logging.log(level=logging.INFO, msg=f'STARTED GMT +0 "{datetime.now()}"')
+    ic.disable()
+    # logging.basicConfig(filename='LOG.log')
+    # logging.log(level=logging.INFO, msg=f'STARTED GMT +0 "{datetime.now()}"')
     register_handlers()
     main()

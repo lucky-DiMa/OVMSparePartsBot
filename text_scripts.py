@@ -1,14 +1,11 @@
 from asyncio import sleep
 from datetime import datetime
-
 from aiogram.enums import ContentType
 from aiogram.filters import Command
-
 from classes import User, Query, SparePart
 from aiogram import types, F
 from config import is_command, text_of_contacts_message
 from create_bot import dp, bot
-from mongo_connector import mongo_db
 
 
 async def cannot_use_command(message: types.Message):
@@ -22,23 +19,23 @@ async def cannot_use_command(message: types.Message):
     return
 
 
-async def start(message: types.Message):
-    if not User.is_id_registered(message.from_user.id):
+async def start(message: types.Message, user_exists: bool, user: User):
+    if not user_exists:
         User.reg(message.from_user.id)
     markup = types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]],
                                        resize_keyboard=True)
     await message.answer(
-        f'Здравствуйте {message.from_user.full_name}!\nЯ бот компании ОМПартс, которая входит в группу компаний ТД Овоще-молочного, помогу вам с лёгкостью найти любую запчасть, если она есть в нашей БД!\n\n{"" if User.get_by_id(message.from_user.id).phone != "" else "Пожалуйста поделись со мной своим контактом Telegram с помощью кнопки ниже чтобы занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер то, к сожалению, вы не сможете использовать этого бота!"}',
-        reply_markup=None if User.get_by_id(message.from_user.id).phone != "" else markup)
+        f'Здравствуйте {message.from_user.full_name}!\nЯ бот компании ОМПартс, которая входит в группу компаний ТД Овоще-молочного, помогу вам с лёгкостью найти любую запчасть, если она есть в нашей БД!\n\n{"" if user.phone != "" else "Пожалуйста поделись со мной своим контактом Telegram с помощью кнопки ниже чтобы занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер то, к сожалению, вы не сможете использовать этого бота!"}',
+        reply_markup=None if user.phone != "" else markup)
 
-    User.get_by_id(message.from_user.id).state = User.get_by_id(message.from_user.id).state if User.get_by_id(
+    user.state = user.state if User.get_by_id(
         message.from_user.id).phone != "" else "SENDING CONTACT"
     await message.delete()
 
 
 # async def get_ph(message: types.Message):
 #     reg(message.from_user.id)
-#     if User.get_by_id(message.from_user.id).state == 'TYPING QUERY':
+#     if user.state == 'TYPING QUERY':
 #         await message.delete()
 #         temp_msg = await message.answer('Вы сейчас вводите запрос!')
 #         await sleep(1.5)
@@ -46,7 +43,7 @@ async def start(message: types.Message):
 #         return
 #     for sp in db:
 #         if sp.photo_link != '':
-#             await message.answer_photo(sp.photo_link, f'Бренд: {sp.brand}\nНаименование: {sp.naming}\nАртикул: {sp.article}\nОригинальный артикул: {sp.article}\nПрименяемость: {sp.usage}')
+#             await message.answer_photo(sp.photo_link, f'Бренд: {sp.brand}\nНаименование: {sp.name}\nАртикул: {sp.code}\nОригинальный артикул: {sp.code}\nПрименяемость: {sp.usage}')
 #     await message.delete()
 
 
@@ -55,24 +52,22 @@ async def contacts(message: types.Message):
     await message.answer(text_of_contacts_message)
 
 
-async def query(message: types.Message):
+async def query_message(message: types.Message, user: User):
     if len(message.text) < 4:
         await message.reply('Минимальная длина запроса - 4 символа!')
         return
-    user = User.get_by_id(message.from_user.id)
-    result = SparePart.search(message.text)
+    await message.delete()
+    await bot.edit_message_text('Запрос обрабатывается, это займёт меньше минуты...', message.from_user.id, user.id_of_message_promoter_to_type)
     user.state = 'NONE'
+    query = Query.make_new(message.from_user.id, message.text, user.id_of_message_promoter_to_type)
     user.previous_query = message.text
-    Query.reg(Query(message.from_user.id, message.text, datetime.now().hour - 5, datetime.now().minute))
-    text = f'Найдено {result.spare_parts_count} запчаст{"ь" if result.spare_parts_count == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{message.text}":' if result.spare_parts_count > 0 else f'Не найдено запчастей по запросу "{message.text}"!'
+    text = f'Найдено {len(query.result.spare_parts)} запчаст{"ь" if len(query.result.spare_parts) == 1 else "и"} {len(query.result.brands)} бренд{"а" if len(query.result.brands) == 1 else "ов"} по запросу "{message.text}":' if len(query.result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{message.text  }"!'
     await bot.edit_message_text(text, user.id, user.id_of_message_promoter_to_type,
-                                reply_markup=result.brands_pages_keyboard(1))
-    await message.delete()
+                                reply_markup=query.result.brands_pages_keyboard(1))
 
 
-async def feedback(message: types.Message):
+async def feedback(message: types.Message, user: User):
     await message.delete()
-    user = User.get_by_id(message.from_user.id)
     user.state = 'TYPING FEEDBACK'
     bot_message = await message.answer(
         'Напишите мне что вам понравилось или непонравилось во мне, а также то, чтобы вы хотили ещё от меня!\nНапишите всё в **одном сообщении**, можно даже прислать фото, например запчасти, которую вы у меня не нашли!',
@@ -82,26 +77,24 @@ async def feedback(message: types.Message):
     user.text_of_message_promoter_to_type = bot_message.text
 
 
-async def feedback_msg(message: types.Message):
-    user = User.get_by_id(message.from_user.id)
+async def feedback_msg(message: types.Message, user: User):
     user.state = 'NONE'
     await bot.edit_message_reply_markup(user.id, user.id_of_message_promoter_to_type)
     await message.answer('Спасибо за то, что даёте обратную связь, возможно мы прислушаемся к вам!')
     await message.forward(-1001778865158)
 
 
-async def contact(message: types.Message):
+async def contact(message: types.Message, user: User):
     if message.contact is None:
         markup = types.ReplyKeyboardMarkup(
-            inline_keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]], resize_keyboard=True)
-        await message.answer(User.get_by_id(message.from_user.id).end_type_text, reply_markup=markup)
+            keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]], resize_keyboard=True)
+        await message.answer(user.end_type_text, reply_markup=markup)
         return
     if message.contact.user_id != message.from_user.id:
         markup = types.ReplyKeyboardMarkup(
-            inline_keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]], resize_keyboard=True)
+            keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]], resize_keyboard=True)
         await message.answer('Вы отправили чужой контакт!', reply_markup=markup)
         return
-    user = User.get_by_id(message.from_user.id)
     user.state = 'NONE'
     user.phone = message.contact.phone_number
     if not user.phone.startswith('+'):
@@ -114,8 +107,7 @@ async def all_messages(message: types.Message):
     await message.reply('Что вы говорите??')
 
 
-async def search(message: types.Message):
-    user = User.get_by_id(message.from_user.id)
+async def search(message: types.Message, user: User):
     if user.state != 'NONE':
         await message.reply(user.end_type_text)
         return
@@ -155,9 +147,9 @@ async def problem_with_username(message: types.Message):
 #     if acc.phone is None:
 #         await message.answer('Извините, но я не знаю вашего номера телефона!\nЧтобы я его увидел пожалуйста зайдите в настройки приватности и включите видимость номера телефона для всех, для всех!\nЗатем зайдите в бота и используйте команду /setphone, я должен написать что номер сохранён!\nПосле моего подтверждение, что номер сохрвнён вы можете выключать видимость номера обратно, если хотите конечно!')
 #     else:
-#         User.get_by_id(message.from_user.id).phone = acc.phone
+#         user.phone = acc.phone
 #         await message.answer(f'Номер +{acc.phone} сохранён!')
-#         if User.get_by_id(message.from_user.id).state == 'NONE' and is_command(message) is not None:
+#         if user.state == 'NONE' and is_command(message) is not None:
 #             match is_command(message).lower():
 #                 case 'start':
 #                     await start(message)
@@ -169,13 +161,13 @@ async def problem_with_username(message: types.Message):
 #                     await contacts(message)
 #                 case _:
 #                     await all_messages(message)
-#         elif User.get_by_id(message.from_user.id).state == 'NONE' and is_command(message) is None:
+#         elif user.state == 'NONE' and is_command(message) is None:
 #             await all_messages(message)
-#         elif User.get_by_id(message.from_user.id).state != 'NONE' and is_command(message) is not None:
+#         elif user.state != 'NONE' and is_command(message) is not None:
 #             await cannot_use_command(message)
-#         elif User.get_by_id(message.from_user.id).state == 'TYPING QUERY' and is_command(message) is None:
+#         elif user.state == 'TYPING QUERY' and is_command(message) is None:
 #             await query(message)
-#         elif User.get_by_id(message.from_user.id).state == 'TYPING FEEDBACK' and is_command(message) is None:
+#         elif user.state == 'TYPING FEEDBACK' and is_command(message) is None:
 #             await feedback_msg(message)
 #         else:
 #             await all_messages(message)
@@ -213,7 +205,7 @@ def reg_handlers():
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
     dp.message.register(contact, lambda _, user: user.state == 'SENDING CONTACT',
                         F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
-    dp.message.register(query, lambda _, user: user.state == 'TYPING QUERY',
+    dp.message.register(query_message, lambda _, user: user.state == 'TYPING QUERY',
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
     dp.message.register(feedback_msg, lambda _, user: user.state == 'TYPING FEEDBACK',
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))

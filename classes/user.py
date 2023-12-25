@@ -1,7 +1,8 @@
+from .json_serializable_class import JsonSerializableClass
 from mongo_connector import mongo_db
 
 
-class User:
+class User(JsonSerializableClass):
     def __init__(self, tg_id: int, phone: str = '',
                  state: str = 'NONE',
                  id_of_message_promoter_to_type: int = -1,

@@ -1,9 +1,11 @@
+from pprint import pprint
 from typing import List
 import requests_to_bd
+from classes.json_serializable_class import JsonSerializableClass
 from classes.brand import Brand
 
 
-class Count:
+class Count(JsonSerializableClass):
     def __init__(self, count: int, warehouse_name: str):
         self.count = count
         self.warehouse_name = warehouse_name
@@ -15,38 +17,34 @@ class Count:
         return f"{self.warehouse_name}: {self.count} шт."
 
 
-class SparePart:
-    def __init__(self, brand: Brand, naming: str, article: str, counts: List[Count],
+class SparePart(JsonSerializableClass):
+    def __init__(self, brand: Brand, name: str, code: str, counts: List[Count],
                  photos: List[str]):
         self.counts = counts
         self.brand = brand
-        self.naming = naming
+        self.name = name
         self.photos = photos
-        self.article = article
+        self.code = code
 
     @classmethod
-    def search(cls, query: str, brand_uid: str = None):
-        from classes.search_result import NoBrandSearchResult, BrandSearchResult
-        if brand_uid is not None and Brand.get_by_uid(brand_uid) is None:
-            return None
-        results_dicts = requests_to_bd.get_parts_by_text(query, brand_uid)["items"]
-        article_sp = cls.get_by_article(query, brand_uid)
-        if article_sp:
-            results_dicts.append({"code": article_sp.article,
-                                  "name": article_sp.naming,
-                                  "brandid": article_sp.brand.uid})
-        if not brand_uid:
-            return NoBrandSearchResult(results_dicts)
-        return BrandSearchResult(query, results_dicts, brand_uid)
+    def search(cls, query: str):
+        from classes.search_result import SearchResult
+        results_dicts = requests_to_bd.get_parts_by_text(query)["items"]
+        code_sp = cls.get_by_code(query)
+        if code_sp:
+            results_dicts.append({"code": code_sp.code,
+                                  "name": code_sp.name,
+                                  "brandid": code_sp.brand.uid})
+        return SearchResult(results_dicts)
 
     @classmethod
-    def get_by_article(cls, article: str, brand_uid: str = None):
+    def get_by_code(cls, code: str, brand_uid: str = None):
         """
         :rtype :SparePart
         """
         if brand_uid is not None and Brand.get_by_uid(brand_uid) is None:
             return None
-        result_dict = requests_to_bd.get_part_by_article(article, brand_uid)
+        result_dict = requests_to_bd.get_part_by_code(code, brand_uid)
         if result_dict['result'] in ['Товар или ячейка не найдены', 'Товар не найден']:
             return None
         result_dict = result_dict["item"]
@@ -57,8 +55,29 @@ class SparePart:
                    result_dict["imgs"])
 
     def __repr__(self):
-        return f'{self.naming} {self.article} {self.brand} {self.counts} {self.photos} '
+        return f'{self.name=} {self.code=} {self.brand=} {self.counts=} {self.photos=} '
+
+
+class SparePartStripped(JsonSerializableClass):
+    def __init__(self, brand: Brand, name: str, code: str,):
+        self.brand = brand
+        self.name = name
+        self.code = code
+
+    def get_full_info(self) -> SparePart:
+        return SparePart.get_by_code(self.code, self.brand.uid)
+
+    def __repr__(self):
+        return f'{self.name=} {self.code=} {self.brand=} '
+
+    @classmethod
+    def from_JSON(cls, sp_dict: dict):
+        return cls(Brand.from_JSON(sp_dict["brand"]), sp_dict["name"], sp_dict["code"])
 
 
 if __name__ == '__main__':
-    print(SparePart.get_by_article(input('A: '), input('B: ')))
+    from classes.search_result import SearchResult
+    res = SparePart.search('Болт')
+    # res = SparePart.search('402184A1')
+    sr = SearchResult.from_JSON(res.to_JSON())
+    print(sr)

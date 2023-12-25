@@ -1,9 +1,9 @@
 from aiogram import types
-
+from .json_serializable_class import JsonSerializableClass
 from requests_to_bd import get_brands
 
 
-class Brand:
+class Brand(JsonSerializableClass):
     def __init__(self, uid: str, name: str):
         self.name = name
         self.uid = uid
@@ -45,6 +45,10 @@ class Brand:
             if brands_dict["uid"] == uid:
                 return (i // 20) + 1
         return -1
+
+    @classmethod
+    def from_JSON(cls, brand_dict: dict):
+        return cls(**brand_dict)
 
 
 if __name__ == '__main__':

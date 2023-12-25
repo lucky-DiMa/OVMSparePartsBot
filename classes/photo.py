@@ -1,9 +1,10 @@
 import os
 from base64 import b64decode
 import requests_to_bd
+from .json_serializable_class import JsonSerializableClass
 
 
-class Photo:
+class Photo(JsonSerializableClass):
     def __init__(self, photo_id: str):
         self.id = photo_id
 
