@@ -54,14 +54,13 @@ async def callback_for_goto_sp_page_buttons(query: types.CallbackQuery):
 
 
 async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
-    code = query.data.split()[-2]
-    brand = Brand.get_by_uid(query.data.split('"')[-2])
     await query.answer()
     await bot.send_chat_action(query.from_user.id, ChatAction.TYPING)
-    sp = SparePart.get_by_code(code, brand.uid)
-    search_query = query.message.text.split('"')[1]
+    n = int(query.data.split()[-1])
+    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
+    sp = SparePart.get_by_code(search_query.result.spare_parts[n].code, search_query.result.spare_parts[n].brand.uid)
     photos = list(map(Photo, sp.photos))
-    text = f'Запрос: "<code>{search_query}</code>".\nБренд: "<code>{sp.brand.name}</code>"\nНаименование: "<code>{sp.name}</code>"\nАртикул: "<code>{sp.code}</code>"\n\n'
+    text = f'Запрос: "<code>{search_query.text}</code>".\nБренд: "<code>{sp.brand.name}</code>"\nНаименование: "<code>{sp.name}</code>"\nАртикул: "<code>{sp.code}</code>"\n\n'
     if sp.counts:
         text += 'В наличии:\n'
     else:
@@ -210,6 +209,14 @@ async def send_contact(query: types.CallbackQuery, user: User):
     await query.message.answer(user.end_type_text, reply_markup=markup)
 
 
+async def callback_for_reload_results_button(query: types.CallbackQuery):
+    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
+    await query.message.edit_text("Результаты обновляются, пожалуйста, подождите, это займёт меньше минуты...")
+    search_query.reload()
+    text = f'Найдено {len(search_query.result.spare_parts)} запчаст{"ь" if len(search_query.result.spare_parts) == 1 else "и"} {len(search_query.result.brands)} бренд{"а" if len(search_query.result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(search_query.result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
+    await query.message.edit_text(text, reply_markup=search_query.result.brands_pages_keyboard(1))
+
+
 def reg_handlers():
     dp.callback_query.register(problem_with_username, lambda query: query.from_user.username is None)
     dp.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
@@ -219,6 +226,7 @@ def reg_handlers():
     dp.callback_query.register(callback_for_search_something_btn,
                                lambda query: query.data.startswith('SEARCH "'))
     dp.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK')
+    dp.callback_query.register(callback_for_reload_results_button, F.data == 'RELOAD RESULTS')
     dp.callback_query.register(callback_for_start_btn,
                                lambda query: query.data.startswith('SEARCH'))
     dp.callback_query.register(callback_for_goto_sp_page_buttons,

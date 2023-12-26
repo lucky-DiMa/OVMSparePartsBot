@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from classes.spare_part import SparePart
 from classes.json_serializable_class import JsonSerializableClass
@@ -69,7 +69,10 @@ class Query(JsonSerializableClass):
     @result.setter
     def result(self, _result: SearchResult):
         self.__result = _result
-        self.__class__.__cluster.update_one({'_id': self.id}, {"$set": {"result": self.result.to_JSON()}})
+        if self.result:
+            self.__class__.__cluster.update_one({'_id': self.id}, {"$set": {"result": self.result.to_JSON()}})
+        else:
+            self.__class__.__cluster.update_one({'_id': self.id}, {"$set": {"result": self.result}})
 
     @classmethod
     def make_new(cls, from_user_id: int, query: str, message_id: int):
@@ -105,11 +108,32 @@ class Query(JsonSerializableClass):
                    dict_query['message_id'],
                    dict_query['text'],
                    datetime.strptime(dict_query['datetime'], "%Y-%m-%d %H:%M:%S.%f"),
-                   SearchResult.from_JSON(dict_query['result']))
+                   SearchResult.from_JSON(dict_query['result']) if dict_query['result'] else dict_query['result'])
 
     @classmethod
     def get_by_from_user_id_and_message_id(cls, from_user_id: int, message_id: int):
         return cls.from_JSON(cls.__cluster.find_one({"from_user_id": from_user_id, "message_id": message_id}))
+
+    @property
+    def expiration_datetime(self):
+        return self.datetime + timedelta(minutes=5)
+
+    @classmethod
+    def get_all(cls):
+        res = []
+        for q_dict in cls.__cluster.find({}):
+            res.append(cls.from_JSON(q_dict))
+        return res
+
+    def reload(self):
+        self.datetime = datetime.utcnow()
+        self.result = SparePart.search(self.text)
+
+    @datetime.setter
+    def datetime(self, _datetime: datetime):
+        self.__datetime = _datetime
+        self.__class__.__cluster.update_one({'_id': self.id}, {'$set': {'datetime': str(self.datetime)}})
+
 
 if __name__ == '__main__':
     Query.delete_all()

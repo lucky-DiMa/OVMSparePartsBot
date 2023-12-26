@@ -14,7 +14,6 @@ class SearchResult(JsonSerializableClass):
             for spare_part in spare_parts:
                 if spare_part["brandid"] not in self.brands:
                     self.brands.append(spare_part["brandid"])
-            ic('GETTING BRANDS')
             for i, b_uid in enumerate(self.brands):
                 self.brands[i] = Brand.get_by_uid(b_uid)
         else:
@@ -23,7 +22,6 @@ class SearchResult(JsonSerializableClass):
         from .spare_part import SparePartStripped
         self.spare_parts: list | List[SparePartStripped] = []
         from .spare_part import SparePartStripped
-        ic('MY CODE STARTED')
         for sp_dict in spare_parts:
             if "brandid" in  sp_dict.keys():
                 sp_dict["brand"] = self.find_brand(sp_dict["brandid"]).to_JSON()
@@ -99,14 +97,16 @@ class SearchResult(JsonSerializableClass):
                                                          callback_data=f'PAGE NUMBER {page_n} {self.brands_pages_count}'),
                               types.InlineKeyboardButton(text='>>', callback_data=f'GOTO BRANDS PAGE {page_n + 1}')])
         inline_kb.append(
-            [types.InlineKeyboardButton(text='Ввести другой запрос', callback_data=f'SEARCH AND DELETE CALL.MESSAGE')])
+            [types.InlineKeyboardButton(text='Ввести другой запрос', callback_data='SEARCH AND DELETE CALL.MESSAGE')])
         markup = types.InlineKeyboardMarkup(inline_keyboard=inline_kb)
         return markup
 
     def sp_pages_of_brand_keyboard(self, brand_uid: str, page_n: int):
         inline_kb = []
         for sp in self.get_sp_page_of_brand_by_n(brand_uid, page_n):
-            inline_kb.append([types.InlineKeyboardButton(text=sp.name, callback_data=f'SHOW {sp.code} "{sp.brand.uid}"')])
+            inline_kb.append([types.InlineKeyboardButton(text=sp.name, callback_data=f'SHOW SP {self.__index_of_sp(sp.code, sp.brand.uid)}')])
+            print(f'SHOW {sp.code} "{sp.brand.uid}"')
+            print(len(f'SHOW {sp.code} "{sp.brand.uid}"'.encode('utf-8')))
         if self.pages_count_of_brand(brand_uid) > 1:
             inline_kb.append([
                 types.InlineKeyboardButton(text='<<', callback_data=f'GOTO SP PAGE {page_n - 1} "{brand_uid}"'),
@@ -123,3 +123,9 @@ class SearchResult(JsonSerializableClass):
             if spare_part.code == code:
                 return spare_part
         return None
+
+    def __index_of_sp(self, code: str, brand_uid: str):
+        for i, sp in enumerate(self.spare_parts):
+            if sp.brand.uid == brand_uid and sp.code == code:
+                return i
+        return -1

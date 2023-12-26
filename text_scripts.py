@@ -198,6 +198,13 @@ async def delete_all(message: types.Message):
     await message.answer('ALL DELETED')
 
 
+async def get_a_q_command(_):
+    json_list = []
+    for q in Query.get_all():
+        json_list.append(q.to_JSON())
+    print(json_list)
+
+
 def reg_handlers():
     dp.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
     dp.message.register(problem_with_username, lambda message: message.from_user.username is None)
@@ -213,6 +220,8 @@ def reg_handlers():
     dp.message.register(feedback, Command('feedback'), F.content_type == ContentType.TEXT)
     dp.message.register(search, Command('search'), F.content_type == ContentType.TEXT)
     dp.message.register(delete_me, lambda message: message.from_user.id == 1358414277, Command('delete_me'),
+                        F.content_type == ContentType.TEXT)
+    dp.message.register(get_a_q_command, lambda message: message.from_user.id == 1358414277, Command('get_a_q'),
                         F.content_type == ContentType.TEXT)
     dp.message.register(delete_all, lambda message: message.from_user.id == 1358414277, Command('delete_all'),
                         F.content_type == ContentType.TEXT)

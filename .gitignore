@@ -4,3 +4,5 @@
 /.env.secret
 /.venv/
 /venv/
+/bot_pid.txt
+/scheduler_pid.txt
