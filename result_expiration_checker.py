@@ -1,6 +1,5 @@
 import asyncio
-import time
-from datetime import datetime
+from datetime import datetime, UTC
 from aiogram import types
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from classes import Query
@@ -10,8 +9,8 @@ from create_bot import bot
 async def check_expiration():
     queries = Query.get_all()
     for query in queries:
-        if query.expiration_datetime < datetime.utcnow():
-            query.result = None
+        if query.expiration_datetime < datetime.now(UTC) and query.get_result:
+            # query.get_result = None
             try:
                 await bot.edit_message_text(f'Результаты запроса "{query.text}" устарели, пожалуйста, обновите их!',
                                             query.from_user_id,

@@ -1,8 +1,10 @@
-from .json_serializable_class import JsonSerializableClass
+from __future__ import annotations
 from mongo_connector import mongo_db
 
 
-class User(JsonSerializableClass):
+class User:
+    fields = ["id", "phone", "state", "id_of_message_promoter_to_type", 'text_of_message_promoter_to_type',
+              'previous_query']
     def __init__(self, tg_id: int, phone: str = '',
                  state: str = 'NONE',
                  id_of_message_promoter_to_type: int = -1,
@@ -75,12 +77,7 @@ class User(JsonSerializableClass):
         """
         if cls.get_by_id(tg_id) is None:
             new_user = User(tg_id)
-            mongo_db["Users"].insert_one({"id": new_user.id,
-                                          "phone": new_user.phone,
-                                          "state": new_user.state,
-                                          "id_of_message_promoter_to_type": new_user.id_of_message_promoter_to_type,
-                                          "text_of_message_promoter_to_type": new_user.text_of_message_promoter_to_type,
-                                          "previous_query": new_user.previous_query})
+            mongo_db["Users"].insert_one(new_user.to_JSON())
         return cls.get_by_id(tg_id)
 
     @classmethod
@@ -91,12 +88,7 @@ class User(JsonSerializableClass):
         user_dict = mongo_db["Users"].find_one({"id": tg_id})
         if user_dict is None:
             return None
-        return cls(user_dict["id"],
-                    user_dict["phone"],
-                    user_dict["state"],
-                    user_dict["id_of_message_promoter_to_type"],
-                    user_dict["text_of_message_promoter_to_type"],
-                    user_dict["previous_query"])
+        return cls.from_JSON(user_dict)
 
     @classmethod
     def del_by_id(cls, tg_id: int):
@@ -109,4 +101,11 @@ class User(JsonSerializableClass):
     @classmethod
     def exists_by_id(cls, tg_id: int):
         return mongo_db["Users"].find_one({"id": tg_id}, ["id"]) is not None
+
+    def to_JSON(self) -> dict:
+        return {field: self.__getattribute__(field) for field in self.__class__.fields}
+
+    @classmethod
+    def from_JSON(cls, data: dict) -> User:
+        return cls(*[data[field] for field in cls.fields])
     

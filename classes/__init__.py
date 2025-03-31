@@ -4,4 +4,5 @@ from .query import Query
 from .photo import Photo
 from .search_result import SearchResult
 from .brand import Brand
-from .json_serializable_class import JsonSerializableClass
+from .json_serializable_object import JsonSerializableObject
+# from .classproperty import classproperty

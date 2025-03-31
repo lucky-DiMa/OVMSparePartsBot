@@ -5,6 +5,8 @@ from classes import User
 from create_bot import dp
 from aiogram import types
 
+from filters import StateFilter
+
 
 async def get_user_update_outer_middleware(handler: callable,
                                            event: types.Update,
@@ -14,21 +16,23 @@ async def get_user_update_outer_middleware(handler: callable,
     await handler(event, data)
 
 
-# async def state_message_checker_callback_query_middleware(handler: callable, event: types.Update, data: dict):
-#     check_state_message = get_flag(data, 'check_state_message', default=False)
-#     if check_state_message and event.message.message_id != data["user"].id_of_message_promoter_to_type:
-#         return await event.answer('Сообщение устарело!', True)
-#     return await handler(event, data)
-#
-#
-# async def state_checker_callback_query_middleware(handler: callable, event: types.Update, data: dict):
-#     state_filter: StateFilter = get_flag(data, 'state_filter', default=None)
-#     if state_filter is not None and not state_filter(user=data["user"]):
-#         return await event.answer(get_flag(data, 'state_error_message'), True)
-#     return await handler(event, data)
+async def state_message_checker_callback_query_middleware(handler: callable, event: types.Update, data: dict):
+    check_state_message = get_flag(data, 'check_state_message', default=False)
+    if check_state_message and event.message.message_id != data["user"].id_of_message_promoter_to_type:
+        return await event.answer('Сообщение устарело!', True)
+    return await handler(event, data)
+
+
+async def state_checker_callback_query_middleware(handler: callable, event: types.Update, data: dict):
+    state_filter: StateFilter = get_flag(data, 'state_filter', default=None)
+    if state_filter is not None and not state_filter(user=data["user"]):
+        if state_filter.checking_state == 'NONE':
+            return await event.answer(data['user'].end_type_text, True)
+        return await event.answer(get_flag(data, 'state_error_message'), True)
+    return await handler(event, data)
 
 
 def register_middleware():
     dp.update.outer_middleware.register(get_user_update_outer_middleware)
-    # dp.callback_query.middleware.register(state_checker_callback_query_middleware)
-    # dp.callback_query.middleware.register(state_message_checker_callback_query_middleware)
+    dp.callback_query.middleware.register(state_checker_callback_query_middleware)
+    dp.callback_query.middleware.register(state_message_checker_callback_query_middleware)

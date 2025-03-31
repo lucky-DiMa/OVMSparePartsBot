@@ -3,36 +3,32 @@ from aiogram import types, F
 from classes import Query, SparePart, User, Photo, Brand
 from config import text_of_contacts_message
 from create_bot import dp, bot
+from filters import StateFilter
+from keyboards import query_keyboard
 
 
 async def callback_for_search_something_btn(query: types.CallbackQuery, user: User):
-    if user.state != 'TYPING QUERY':
-        await query.answer('Вы сейчас не отправляете запрос!', show_alert=True)
-        await query.message.delete()
-        return
-    if user.id_of_message_promoter_to_type != query.message.message_id:
-        await query.answer('Сообщение устарело!', True)
-        await query.message.delete()
-        return
     await query.message.edit_text('Запрос обрабатывается, это займёт меньше минуты...')
-    search_query = Query.make_new(query.from_user.id, query.data.split('"')[-2], query.message.message_id)
     user.state = 'NONE'
-    text = f'Найдено {len(search_query.result.spare_parts)} запчаст{"ь" if len(search_query.result.spare_parts) == 1 else "и"} {len(search_query.result.brands)} бренд{"а" if len(search_query.result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(search_query.result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
-    await query.message.edit_text(text, reply_markup=search_query.result.brands_pages_keyboard(1))
+    search_query = Query.create(query.from_user.id, query.data.split('"')[-2], query.message.message_id)
+    result = await search_query.get_result()
+    text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
+    await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(1))
 
 
 async def callback_for_goto_sp_page_buttons(query: types.CallbackQuery):
     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
+    result = await search_query.get_result()
     new_page_n = int(query.data.split()[-2])
     if new_page_n == 0:
         await query.answer('Вы находитесь на первой странице!', True)
         return
-    if new_page_n - search_query.result.pages_count_of_brand(query.data.split('"')[-2]) == 1:
+    if new_page_n - result.pages_count_of_brand(query.data.split('"')[-2]) == 1:
         await query.answer('Вы находитесь на последней странице странице!', True)
         return
-    if new_page_n > search_query.result.pages_count_of_brand(query.data.split('"')[-2]):
-        new_page_n = search_query.result.pages_count_of_brand(query.data.split('"')[-2])
-    await query.message.edit_reply_markup(reply_markup=search_query.result.sp_pages_of_brand_keyboard(query.data.split('"')[-2], new_page_n))
+    if new_page_n > result.pages_count_of_brand(query.data.split('"')[-2]):
+        new_page_n = result.pages_count_of_brand(query.data.split('"')[-2])
+    await query.message.edit_reply_markup(reply_markup=result.sp_pages_of_brand_keyboard(query.data.split('"')[-2], new_page_n))
 
 
 # async def callback_for_back_to_results_btn(query: types.CallbackQuery):
@@ -58,8 +54,8 @@ async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
     await bot.send_chat_action(query.from_user.id, ChatAction.TYPING)
     n = int(query.data.split()[-1])
     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    sp = SparePart.get_by_code(search_query.result.spare_parts[n].code, search_query.result.spare_parts[n].brand.uid)
-    photos = list(map(Photo, sp.photos))
+    result = await search_query.get_result()
+    sp = await result.spare_parts[n].get_full_info()
     text = f'Запрос: "<code>{search_query.text}</code>".\nБренд: "<code>{sp.brand.name}</code>"\nНаименование: "<code>{sp.name}</code>"\nАртикул: "<code>{sp.code}</code>"\n\n'
     if sp.counts:
         text += 'В наличии:\n'
@@ -68,13 +64,13 @@ async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
     for count in sp.counts:
         text += f"{count}\n"
     try:
-        if len(photos) == 1:
-            await query.message.answer_photo(types.FSInputFile(photos[0].download()), text, parse_mode='HTML')
-        elif len(photos) == 0:
+        if len(sp.photos) == 1:
+            await query.message.answer_photo(types.FSInputFile(sp.photos[0].download()), text, parse_mode='HTML')
+        elif len(sp.photos) == 0:
             await query.message.answer(text, parse_mode='HTML')
         else:
             media_list = []
-            for i, photo in enumerate(photos):
+            for i, photo in enumerate(sp.photos):
                 if i == 0:
                     media_list.append(
                         types.InputMediaPhoto(media=types.FSInputFile(photo.download()), caption=text, parse_mode='HTML'))
@@ -84,35 +80,25 @@ async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
     except Exception as e:
         await query.message.answer(text + '\n\nОшибка, недопустимый размер изображения! Изображение не подгружено!\n\n' + str(e),
                                    parse_mode='HTML')
-    for photo in photos:
+    for photo in sp.photos:
         photo.remove()
 
 
 async def callback_for_cancel_typing_query_btn(query: types.CallbackQuery, user: User):
-    if user.state != 'TYPING QUERY':
-        await query.answer('Вы сейчас не отправляете запрос!', show_alert=True)
-        await query.message.delete()
-        return
-    if user.id_of_message_promoter_to_type != query.message.message_id:
-        await query.answer('Вы нажали на кнопку из другого сообщения!', show_alert=True)
-        await query.message.delete()
-        return
     user.state = 'NONE'
     await query.message.edit_text('Поиск отменён!', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text='Искать запчасти!', callback_data='SEARCH AND DELETE CALL.MESSAGE')]]))
+        [types.InlineKeyboardButton(text='Искать запчасти!', callback_data='SEARCH')]]))
     await query.answer('Поиск отменён!')
 
 
 async def callback_for_help_typing_query_btn(query: types.CallbackQuery, user: User):
-    if user.state != 'TYPING QUERY':
-        await query.answer('Вы сейчас не отправляете запрос!', show_alert=True)
-        await query.message.delete()
-        return
-    if user.id_of_message_promoter_to_type != query.message.message_id:
-        await query.answer('Вы нажали на кнопку из другого сообщения!', show_alert=True)
-        await query.message.delete()
-        return
     await query.answer('Введите артикул или часть наименования запчасти, которую вы ищите!', show_alert=True)
+
+
+async def callback_for_set_query_type_button(query: types.CallbackQuery, user: User):
+    new_type: str = query.data.split(' ')[-1]
+    await query.answer()
+    await query.message.edit_reply_markup(reply_markup=query_keyboard(user, new_type))
 
 
 async def callback_for_contacts_btn(query: types.CallbackQuery):
@@ -122,29 +108,19 @@ async def callback_for_contacts_btn(query: types.CallbackQuery):
 async def callback_for_choose_brand_buttons(query: types.CallbackQuery):
     brand_uid = query.data.split('"')[-2]
     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
+    result = await search_query.get_result()
     await query.message.edit_text(
-        f'{len(search_query.result.filter_brand(brand_uid))} запчастей бренда {search_query.result.find_brand(brand_uid).name} по запросу "{search_query.text}":',
-        reply_markup=search_query.result.sp_pages_of_brand_keyboard(brand_uid, 1))
+        f'{len(result.filter_brand(brand_uid))} запчастей бренда {result.find_brand(brand_uid).name} по запросу "{search_query.text}":',
+        reply_markup=result.sp_pages_of_brand_keyboard(brand_uid, 1))
 
 
 async def callback_for_start_btn(query: types.CallbackQuery, user: User):
-    if query.data.startswith('SEARCH AND DELETE CALL.MESSAGE'):
-        await query.message.delete()
     if user.state != 'NONE':
         await query.answer(user.end_type_text, True)
         return
-    inline_kb = []
-    if user.previous_query != '':
-        inline_kb.append([types.InlineKeyboardButton(text=f'Ввести "{user.previous_query}"',
-                                                     callback_data=f'SEARCH "{user.previous_query}"')])
-    inline_kb.append([types.InlineKeyboardButton(text='<< ПОМОЩЬ >>', callback_data='HELP TYPING QUERY')])
-    inline_kb.append([types.InlineKeyboardButton(text='<< ОТМЕНА >>',
-                                                 callback_data='CANCEL TYPING QUERY')])
-    markup = types.InlineKeyboardMarkup(inline_keyboard=inline_kb)
-
-    user.id_of_message_promoter_to_type = (
-        await query.message.answer("Отправьте поисковой запрос!", reply_markup=markup)).message_id
-    user.state = 'TYPING QUERY'
+    await query.answer()
+    from text_scripts import search
+    await search(query.message, user)
 
 
 async def callback_for_need_new_brand_btn(query: types.CallbackQuery):
@@ -152,14 +128,6 @@ async def callback_for_need_new_brand_btn(query: types.CallbackQuery):
 
 
 async def callback_for_cancel_typing_feedback_btn(query: types.CallbackQuery, user: User):
-    if user.state != 'TYPING FEEDBACK':
-        await query.answer('Вы сейчас не отправляете сообщение обратной связи!', show_alert=True)
-        await query.message.delete()
-        return
-    if user.id_of_message_promoter_to_type != query.message.message_id:
-        await query.answer('Вы нажали на кнопку из другого сообщения!', show_alert=True)
-        await query.message.delete()
-        return
     user.state = 'NONE'
     await query.answer(f'Написание сообщения обратной сваязи отменено!', show_alert=True)
     await query.message.delete()
@@ -179,15 +147,16 @@ async def callback_for_page_number_button(query: types.CallbackQuery):
 async def callback_for_goto_brands_page_buttons(query: types.CallbackQuery):
     new_page_n = int(query.data.split()[-1])
     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
+    result = await search_query.get_result()
     if new_page_n == 0:
         await query.answer('Вы находитесь на первой странице!', True)
         return
-    if new_page_n - search_query.result.brands_pages_count == 1:
+    if new_page_n - result.brands_pages_count == 1:
         await query.answer('Вы находитесь на последней странице странице!', True)
         return
-    if new_page_n > search_query.result.brands_pages_count:
-        new_page_n = Brand.pages_count()
-    await query.message.edit_reply_markup(reply_markup=search_query.result.brands_pages_keyboard(new_page_n))
+    if new_page_n > result.brands_pages_count:
+        new_page_n = result.brands_pages_count
+    await query.message.edit_reply_markup(reply_markup=result.brands_pages_keyboard(new_page_n))
 
 
 async def not_registered(query: types.CallbackQuery):
@@ -197,8 +166,9 @@ async def not_registered(query: types.CallbackQuery):
 async def callback_for_back_to_brands_button(query: types.CallbackQuery):
     page_n = int(query.data.split()[-1])
     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    text = f'Найдено {len(search_query.result.spare_parts)} запчаст{"ь" if len(search_query.result.spare_parts) == 1 else "и"} {len(search_query.result.brands)} бренд{"а" if len(search_query.result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(search_query.result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
-    await query.message.edit_text(text, reply_markup=search_query.result.brands_pages_keyboard(page_n))
+    result = await search_query.get_result()
+    text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
+    await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(page_n))
 
 
 async def send_contact(query: types.CallbackQuery, user: User):
@@ -209,24 +179,46 @@ async def send_contact(query: types.CallbackQuery, user: User):
     await query.message.answer(user.end_type_text, reply_markup=markup)
 
 
-async def callback_for_reload_results_button(query: types.CallbackQuery):
-    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    await query.message.edit_text("Результаты обновляются, пожалуйста, подождите, это займёт меньше минуты...")
-    search_query.reload()
-    text = f'Найдено {len(search_query.result.spare_parts)} запчаст{"ь" if len(search_query.result.spare_parts) == 1 else "и"} {len(search_query.result.brands)} бренд{"а" if len(search_query.result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(search_query.result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
-    await query.message.edit_text(text, reply_markup=search_query.result.brands_pages_keyboard(1))
+# async def callback_for_reload_results_button(query: types.CallbackQuery):
+#     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
+#     await query.message.edit_text("Результаты обновляются, пожалуйста, подождите, это займёт меньше минуты...")
+#     result = await search_query.get_result()
+#     text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
+#     await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(1))
 
 
 def reg_handlers():
     dp.callback_query.register(problem_with_username, lambda query: query.from_user.username is None)
     dp.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
     dp.callback_query.register(send_contact, lambda _, user: user.state == 'SENDING CONTACT')
-    dp.callback_query.register(callback_for_help_typing_query_btn, F.data == 'HELP TYPING QUERY')
-    dp.callback_query.register(callback_for_cancel_typing_query_btn, F.data == 'CANCEL TYPING QUERY')
+    dp.callback_query.register(callback_for_help_typing_query_btn, F.data == 'HELP TYPING QUERY', flags={
+            'state_filter': StateFilter("TYPING QUERY"),
+            "check_state_message": True,
+            "state_error_message": 'Вы сейчас не отправляете запрос!'
+        })
+    dp.callback_query.register(callback_for_cancel_typing_query_btn, F.data == 'CANCEL TYPING QUERY', flags={
+            'state_filter': StateFilter("TYPING QUERY"),
+            "check_state_message": True,
+            "state_error_message": 'Вы сейчас не отправляете запрос!'
+        })
+    dp.callback_query.register(callback_for_set_query_type_button,
+                               lambda query: query.data.startswith('SET_QUERY_TYPE '), flags={
+            'state_filter': StateFilter("TYPING QUERY"),
+            "check_state_message": True,
+            "state_error_message": 'Вы сейчас не отправляете запрос!'
+        })
     dp.callback_query.register(callback_for_search_something_btn,
-                               lambda query: query.data.startswith('SEARCH "'))
-    dp.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK')
-    dp.callback_query.register(callback_for_reload_results_button, F.data == 'RELOAD RESULTS')
+                               lambda query: query.data.startswith('SEARCH "'), flags={
+            'state_filter': StateFilter("TYPING QUERY"),
+            "check_state_message": True,
+            'state_error_message': 'Вы сейчас не отправляете запрос!'
+        })
+    dp.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK', flags={
+        'state_filter': StateFilter("TYPING FEEDBACK"),
+        "check_state_message": True,
+        "state_error_message": 'Вы сейчас не отправляете сообщение обратной связи!'
+    })
+    # dp.callback_query.register(callback_for_reload_results_button, F.data == 'RELOAD RESULTS')
     dp.callback_query.register(callback_for_start_btn,
                                lambda query: query.data.startswith('SEARCH'))
     dp.callback_query.register(callback_for_goto_sp_page_buttons,

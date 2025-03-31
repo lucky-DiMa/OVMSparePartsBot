@@ -1,37 +1,29 @@
+from __future__ import annotations
 from copy import copy
 from typing import List
 from aiogram import types
 from icecream import ic
+
+import requests_to_bd
+from . import SparePart
 from .brand import Brand
-from .json_serializable_class import JsonSerializableClass
+from .redis_object import RedisObject
+from .spare_part import SparePartStripped
 
 
-class SearchResult(JsonSerializableClass):
-    def __init__(self, spare_parts: List[dict], brands: List[dict] | None = None):
-        # ic.enable()
-        self.brands: list | List[str, Brand] = []
-        if brands is None:
-            for spare_part in spare_parts:
-                if spare_part["brandid"] not in self.brands:
-                    self.brands.append(spare_part["brandid"])
-            for i, b_uid in enumerate(self.brands):
-                self.brands[i] = Brand.get_by_uid(b_uid)
-        else:
-            for brand_dict in brands:
-                self.brands.append(Brand.from_JSON(brand_dict))
-        from .spare_part import SparePartStripped
-        self.spare_parts: list | List[SparePartStripped] = []
-        from .spare_part import SparePartStripped
-        for sp_dict in spare_parts:
-            if "brandid" in  sp_dict.keys():
-                sp_dict["brand"] = self.find_brand(sp_dict["brandid"]).to_JSON()
-                sp_dict.pop("brandid")
-            self.spare_parts.append(SparePartStripped.from_JSON(sp_dict))
-        # ic.disable()
+class SearchResult(RedisObject):
+    redis_collection_name = "search_result"
+    redis_TTL = 300
+    redis_key = "text"
+    fields = {"text": str, 'spare_parts': list[SparePartStripped], 'brands': list[Brand]}
+    def __init__(self, text: str, spare_parts: list[SparePartStripped], brands: list[Brand]):
+        self.text = text
+        self.spare_parts = spare_parts
+        self.brands = brands
 
-    @classmethod
-    def from_JSON(cls, json_dict: dict):
-        return cls(**json_dict)
+    # @property
+    # def lower_text(self) -> str:
+    #     return self.text.lower()
 
     def find_brand(self, uid: str) -> Brand | None:
         for brand in self.brands:
@@ -105,8 +97,6 @@ class SearchResult(JsonSerializableClass):
         inline_kb = []
         for sp in self.get_sp_page_of_brand_by_n(brand_uid, page_n):
             inline_kb.append([types.InlineKeyboardButton(text=sp.name, callback_data=f'SHOW SP {self.__index_of_sp(sp.code, sp.brand.uid)}')])
-            print(f'SHOW {sp.code} "{sp.brand.uid}"')
-            print(len(f'SHOW {sp.code} "{sp.brand.uid}"'.encode('utf-8')))
         if self.pages_count_of_brand(brand_uid) > 1:
             inline_kb.append([
                 types.InlineKeyboardButton(text='<<', callback_data=f'GOTO SP PAGE {page_n - 1} "{brand_uid}"'),
@@ -129,3 +119,34 @@ class SearchResult(JsonSerializableClass):
             if sp.brand.uid == brand_uid and sp.code == code:
                 return i
         return -1
+
+    @classmethod
+    async def get(cls, text: str) -> SearchResult:
+        redis_result = await cls.get_from_redis(text.lower())
+        if redis_result:
+            return redis_result
+        results_dicts = requests_to_bd.get_parts_by_text(text.lower())["items"]
+        code_sp = await SparePart.get_by_code(text.lower())
+        from classes.spare_part import SparePartStripped
+        spare_parts: list[SparePartStripped] = []
+        all_brands = Brand.get_all_brands_dict()
+        brands: list[Brand] = []
+        brand_added: dict[str, bool] = {}
+        spare_part_added: dict[str, bool] = {}
+        if code_sp:
+            spare_parts.append(code_sp.stripped)
+            brands.append(code_sp.brand)
+            brand_added[code_sp.brand.uid] = True
+            brand_added[code_sp.code] = True
+        for spare_part_dict in results_dicts:
+            brand = all_brands[spare_part_dict["brandid"]]
+            spare_part_stripped = SparePartStripped(brand, spare_part_dict['name'], spare_part_dict['code'])
+            if not spare_part_added.get(spare_part_stripped.code, False):
+                spare_parts.append(spare_part_stripped)
+                spare_part_added[spare_part_stripped.code] = True
+                if not brand_added.get(brand.uid, False):
+                    brands.append(brand)
+                    brand_added[brand.uid] = True
+        self = cls(text, spare_parts, brands)
+        await self.save_to_redis()
+        return self

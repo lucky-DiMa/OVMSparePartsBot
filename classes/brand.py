@@ -1,55 +1,38 @@
-from aiogram import types
-from .json_serializable_class import JsonSerializableClass
+from __future__ import annotations
+from classes.redis_object import RedisObject
 from requests_to_bd import get_brands
 
-
-class Brand(JsonSerializableClass):
+class Brand(RedisObject):
+    redis_collection_name = 'Brands'
+    redis_key = 'uid'
+    redis_TTL = 300
+    fields = {'uid': str, 'name': str}
     def __init__(self, uid: str, name: str):
         self.name = name
         self.uid = uid
 
     @classmethod
-    def get_by_uid(cls, uid: str | None):
+    async def get_by_uid(cls, uid: str | None) -> Brand | None:
+        redis_result = await cls.get_from_redis(uid)
+        if redis_result:
+            return redis_result
         for brands_dict in get_brands()["brands"]:
             if brands_dict["uid"] == uid:
-                return cls(brands_dict["uid"], brands_dict["name"])
+                self = cls.from_JSON(brands_dict)
+                await self.save_to_redis()
+                return self
         return None
 
     @classmethod
-    def get_page(cls, n: int):
-        return [cls(brands_dict["uid"], brands_dict["name"]) for brands_dict in get_brands()["brands"][20*(n-1):20*n]]
-
-    @classmethod
-    def get_pages_keyboard(cls, page_n: int):
-        inline_kb = []
-        for brand in cls.get_page(page_n):
-            inline_kb.append([types.InlineKeyboardButton(text=brand.name, callback_data=f'CHOOSE BRAND "{brand.uid}"')])
-        if page_n == cls.pages_count:
-            inline_kb.append([types.InlineKeyboardButton(text='Нужен другой бренд?', callback_data='NEED NEW BRAND')])
-        inline_kb.append([types.InlineKeyboardButton(text='<<', callback_data=f'GOTO BRANDS PAGE {page_n - 1}'),
-                          types.InlineKeyboardButton(text=f'{page_n} / {cls.pages_count()}', callback_data='BRANDS PAGE NUMBER'),
-                          types.InlineKeyboardButton(text='>>', callback_data=f'GOTO BRANDS PAGE {page_n + 1}')])
-        markup = types.InlineKeyboardMarkup(inline_keyboard=inline_kb)
-        return markup
+    def get_all_brands_dict(cls) -> dict[str, Brand]:
+        result: dict[str, Brand] = {}
+        for brands_dict in get_brands()["brands"]:
+            result[brands_dict["uid"]] = Brand.from_JSON(brands_dict)
+        return result
 
     def __repr__(self):
         return f'{self.uid} {self.name}'
 
-    @classmethod
-    def pages_count(cls):
-        return len(get_brands()["brands"]) // 20
-
-    @classmethod
-    def get_page_n(cls, uid: str):
-        for i, brands_dict in enumerate(get_brands()["brands"]):
-            if brands_dict["uid"] == uid:
-                return (i // 20) + 1
-        return -1
-
-    @classmethod
-    def from_JSON(cls, brand_dict: dict):
-        return cls(**brand_dict)
-
 
 if __name__ == '__main__':
-    print(Brand.get_by_uid(input()))
+    print(Brand.from_JSON(Brand('abc', 'abc-name').to_JSON()).to_JSON())

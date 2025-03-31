@@ -6,6 +6,8 @@ from classes import User, Query, SparePart
 from aiogram import types, F
 from config import is_command, text_of_contacts_message
 from create_bot import dp, bot
+from filters import StateFilter
+from keyboards import query_keyboard
 
 
 async def cannot_use_command(message: types.Message):
@@ -21,7 +23,7 @@ async def cannot_use_command(message: types.Message):
 
 async def start(message: types.Message, user_exists: bool, user: User):
     if not user_exists:
-        User.reg(message.from_user.id)
+        user = User.reg(message.from_user.id)
     markup = types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]],
                                        resize_keyboard=True)
     await message.answer(
@@ -56,21 +58,22 @@ async def query_message(message: types.Message, user: User):
     if len(message.text) < 4:
         await message.reply('Минимальная длина запроса - 4 символа!')
         return
-    await message.delete()
-    await bot.edit_message_text('Запрос обрабатывается, это займёт меньше минуты...', message.from_user.id, user.id_of_message_promoter_to_type)
     user.state = 'NONE'
-    query = Query.make_new(message.from_user.id, message.text, user.id_of_message_promoter_to_type)
+    await message.delete()
+    await bot.edit_message_text('Запрос обрабатывается, это займёт меньше минуты...', chat_id=message.from_user.id, message_id=user.id_of_message_promoter_to_type)
+    query = Query.create(message.from_user.id, message.text, user.id_of_message_promoter_to_type)
     user.previous_query = message.text
-    text = f'Найдено {len(query.result.spare_parts)} запчаст{"ь" if len(query.result.spare_parts) == 1 else "и"} {len(query.result.brands)} бренд{"а" if len(query.result.brands) == 1 else "ов"} по запросу "{message.text}":' if len(query.result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{message.text  }"!'
-    await bot.edit_message_text(text, user.id, user.id_of_message_promoter_to_type,
-                                reply_markup=query.result.brands_pages_keyboard(1))
+    result = await query.get_result()
+    text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{message.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{message.text}"!'
+    await bot.edit_message_text(text, chat_id=user.id, message_id=user.id_of_message_promoter_to_type,
+                                reply_markup=result.brands_pages_keyboard(1))
 
 
 async def feedback(message: types.Message, user: User):
     await message.delete()
     user.state = 'TYPING FEEDBACK'
     bot_message = await message.answer(
-        'Напишите мне что вам понравилось или непонравилось во мне, а также то, чтобы вы хотили ещё от меня!\nНапишите всё в **одном сообщении**, можно даже прислать фото, например запчасти, которую вы у меня не нашли!',
+        'Напишите мне что вам понравилось или не понравилось во мне, а также то, чтобы вы хотели ещё от меня!\nНапишите всё в **одном сообщении**, можно даже прислать фото, например запчасти, которую вы у меня не нашли!',
         'MARKDOWN', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text='<< ОТМЕНА >>', callback_data='CANCEL TYPING FEEDBACK')]]))
     user.id_of_message_promoter_to_type = bot_message.message_id
@@ -79,7 +82,7 @@ async def feedback(message: types.Message, user: User):
 
 async def feedback_msg(message: types.Message, user: User):
     user.state = 'NONE'
-    await bot.edit_message_reply_markup(user.id, user.id_of_message_promoter_to_type)
+    await bot.edit_message_reply_markup(chat_id=user.id, message_id=user.id_of_message_promoter_to_type)
     await message.answer('Спасибо за то, что даёте обратную связь, возможно мы прислушаемся к вам!')
     await message.forward(-1001778865158)
 
@@ -111,15 +114,7 @@ async def search(message: types.Message, user: User):
     if user.state != 'NONE':
         await message.reply(user.end_type_text)
         return
-    inline_kb = []
-    if user.previous_query != '':
-        inline_kb.append([types.InlineKeyboardButton(text=f'Ввести "{user.previous_query}"',
-                                                     callback_data=f'SEARCH "{user.previous_query}"')])
-    inline_kb.append([types.InlineKeyboardButton(text='<< ПОМОЩЬ >>', callback_data='HELP TYPING QUERY')])
-    inline_kb.append([types.InlineKeyboardButton(text='<< ОТМЕНА >>',
-                                                 callback_data='CANCEL TYPING QUERY')])
-
-    markup = types.InlineKeyboardMarkup(inline_keyboard=inline_kb)
+    markup = query_keyboard(user, 'single')
     user.id_of_message_promoter_to_type = (
         await message.answer("Отправьте поисковой запрос!", reply_markup=markup)).message_id
     user.state = 'TYPING QUERY'
@@ -210,11 +205,11 @@ def reg_handlers():
     dp.message.register(problem_with_username, lambda message: message.from_user.username is None)
     dp.message.register(start, lambda _, user_exists: not user_exists,
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
-    dp.message.register(contact, lambda _, user: user.state == 'SENDING CONTACT',
+    dp.message.register(contact, StateFilter('SENDING CONTACT'),
                         F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
-    dp.message.register(query_message, lambda _, user: user.state == 'TYPING QUERY',
+    dp.message.register(query_message, StateFilter('TYPING QUERY'),
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
-    dp.message.register(feedback_msg, lambda _, user: user.state == 'TYPING FEEDBACK',
+    dp.message.register(feedback_msg, StateFilter('TYPING FEEDBACK'),
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
     dp.message.register(start, Command('start'), F.content_type == ContentType.TEXT)
     dp.message.register(feedback, Command('feedback'), F.content_type == ContentType.TEXT)

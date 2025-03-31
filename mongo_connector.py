@@ -1,3 +1,4 @@
 from pymongo import MongoClient
+from config import MONGO_AUTH_LINK, MONGO_CLUSTER_NAME
 
-mongo_db = MongoClient('mongodb+srv://Sr_lucky_MaN:DDunin2008@db-for-bots-by-sr-lucky.j5gaahm.mongodb.net/?retryWrites=true&w=majority')['OVMBot']
+mongo_db = MongoClient(MONGO_AUTH_LINK)[MONGO_CLUSTER_NAME]

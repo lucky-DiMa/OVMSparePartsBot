@@ -8,6 +8,7 @@ from icecream import ic
 
 from config import BY_WEBHOOK, BASE_WEBHOOK_URL
 from create_bot import dp, bot
+from redis_connector import connect_redis, close_redis
 from register_handlers import register_handlers
 
 WEB_SERVER_HOST = "127.0.0.1"
@@ -17,11 +18,16 @@ WEBHOOK_SECRET = str(randint(1, 1000000))
 
 
 async def on_startup_webhook() -> None:
+    await connect_redis()
     await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_TOKEN=WEBHOOK_SECRET)
+
+async def on_shutdown() -> None:
+    await close_redis()
 
 
 def start_bot_webhook() -> None:
     dp.startup.register(on_startup_webhook)
+    dp.shutdown.register(on_startup_webhook)
     app = web.Application()
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
@@ -32,9 +38,13 @@ def start_bot_webhook() -> None:
     setup_application(app, dp, bot=bot)
     web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
 
+async def on_startup_polling():
+    await connect_redis()
 
 async def start_bot_polling():
     await bot.delete_webhook()
+    dp.startup.register(on_startup_polling)
+    dp.shutdown.register(on_shutdown)
     await dp.start_polling(bot)
 
 
@@ -46,8 +56,9 @@ def main():
 
 
 if __name__ == "__main__":
-    ic.disable()
-    # logging.basicConfig(filename='LOG.log')
-    # logging.log(level=logging.INFO, msg=f'STARTED GMT +0 "{datetime.now()}"')
+    if BY_WEBHOOK:
+        logging.basicConfig(filename='LOG.log')
+        logging.log(level=logging.INFO, msg=f'STARTED GMT +0 "{datetime.now()}"')
+        ic.disable()
     register_handlers()
     main()
