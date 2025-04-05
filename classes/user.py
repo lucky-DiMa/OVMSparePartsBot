@@ -1,10 +1,14 @@
 from __future__ import annotations
+
+from classes.mongo_db_object import MongoDBObject
 from mongo_connector import mongo_db
 
 
-class User:
-    fields = ["id", "phone", "state", "id_of_message_promoter_to_type", 'text_of_message_promoter_to_type',
-              'previous_query']
+class User(MongoDBObject):
+    fields = {"id": int, "phone": str, "state": str, "id_of_message_promoter_to_type": str, 'text_of_message_promoter_to_type': str,
+              'previous_query': str}
+    collection_name = 'Users'
+
     def __init__(self, tg_id: int, phone: str = '',
                  state: str = 'NONE',
                  id_of_message_promoter_to_type: int = -1,
@@ -48,64 +52,52 @@ class User:
     @phone.setter
     def phone(self, phone: str):
         self.__phone = phone
-        mongo_db["Users"].update_one({"id": self.id}, {"$set": {"phone": phone}})
+        self.collection.update_one({"id": self.id}, {"$set": {"phone": phone}})
 
     @state.setter
     def state(self, state: str):
         self.__state = state
-        mongo_db["Users"].update_one({"id": self.id}, {"$set": {"state": state}})
+        self.collection.update_one({"id": self.id}, {"$set": {"state": state}})
 
     @id_of_message_promoter_to_type.setter
     def id_of_message_promoter_to_type(self, id_of_message_promoter_to_type: str):
         self.__id_of_message_promoter_to_type = id_of_message_promoter_to_type
-        mongo_db["Users"].update_one({"id": self.id}, {"$set": {"id_of_message_promoter_to_type": id_of_message_promoter_to_type}})
+        self.collection.update_one({"id": self.id}, {"$set": {"id_of_message_promoter_to_type": id_of_message_promoter_to_type}})
 
     @text_of_message_promoter_to_type.setter
     def text_of_message_promoter_to_type(self, text_of_message_promoter_to_type: str):
         self.__text_of_message_promoter_to_type = text_of_message_promoter_to_type
-        mongo_db["Users"].update_one({"id": self.id}, {"$set": {"text_of_message_promoter_to_type": text_of_message_promoter_to_type}})
+        self.collection.update_one({"id": self.id}, {"$set": {"text_of_message_promoter_to_type": text_of_message_promoter_to_type}})
 
     @previous_query.setter
     def previous_query(self, previous_query: str):
         self.__previous_query = previous_query
-        mongo_db["Users"].update_one({"id": self.id}, {"$set": {"previous_query": previous_query}})
+        self.collection.update_one({"id": self.id}, {"$set": {"previous_query": previous_query}})
 
     @classmethod
-    def reg(cls, tg_id: int):
-        """
-        :rtype :User
-        """
-        if cls.get_by_id(tg_id) is None:
-            new_user = User(tg_id)
-            mongo_db["Users"].insert_one(new_user.to_JSON())
-        return cls.get_by_id(tg_id)
+    def reg(cls, tg_id: int) -> User:
+        if (user := cls.get_by_id(tg_id)) is None:
+            user = User(tg_id)
+            cls.collection.insert_one(user.to_json())
+            return user
+        return user
 
     @classmethod
-    def get_by_id(cls, tg_id: int):
-        """
-        :rtype :User
-        """
-        user_dict = mongo_db["Users"].find_one({"id": tg_id})
+    def get_by_id(cls, tg_id: int) -> User | None:
+        user_dict = cls.collection.find_one({"id": tg_id})
         if user_dict is None:
             return None
-        return cls.from_JSON(user_dict)
+        return cls.from_json(user_dict)
 
     @classmethod
     def del_by_id(cls, tg_id: int):
-        mongo_db["Users"].delete_one({"id": tg_id})
+        cls.collection.delete_one({"id": tg_id})
         
-    @staticmethod
-    def delete_all():
-        mongo_db["Users"].drop()
+    @classmethod
+    def delete_all(cls):
+        cls.collection.drop()
 
     @classmethod
     def exists_by_id(cls, tg_id: int):
-        return mongo_db["Users"].find_one({"id": tg_id}, ["id"]) is not None
-
-    def to_JSON(self) -> dict:
-        return {field: self.__getattribute__(field) for field in self.__class__.fields}
-
-    @classmethod
-    def from_JSON(cls, data: dict) -> User:
-        return cls(*[data[field] for field in cls.fields])
+        return cls.collection.find_one({"id": tg_id}, cls.fields_keys) is not None
     

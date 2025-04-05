@@ -5,10 +5,16 @@ from aiogram import types
 from icecream import ic
 
 import requests_to_bd
+from setup_morphy import morph
 from . import SparePart
 from .brand import Brand
 from .redis_object import RedisObject
 from .spare_part import SparePartStripped
+
+
+class TooShortQueryException(Exception):
+    """Query text is too short, the minimum length is 4."""
+    pass
 
 
 class SearchResult(RedisObject):
@@ -122,11 +128,14 @@ class SearchResult(RedisObject):
 
     @classmethod
     async def get(cls, text: str) -> SearchResult:
-        redis_result = await cls.get_from_redis(text.lower())
+        if len(text) < 4:
+            raise TooShortQueryException(text)
+        text = text.lower()
+        redis_result = await cls.get_from_redis(text)
         if redis_result:
             return redis_result
-        results_dicts = requests_to_bd.get_parts_by_text(text.lower())["items"]
-        code_sp = await SparePart.get_by_code(text.lower())
+        results_dicts = requests_to_bd.get_parts_by_text(text)["items"]
+        code_sp = await SparePart.get_by_code(text)
         from classes.spare_part import SparePartStripped
         spare_parts: list[SparePartStripped] = []
         all_brands = Brand.get_all_brands_dict()
@@ -150,3 +159,24 @@ class SearchResult(RedisObject):
         self = cls(text, spare_parts, brands)
         await self.save_to_redis()
         return self
+
+    @classmethod
+    async def get_many(cls, texts: list[str]) -> list[SearchResult]:
+        res: list[SearchResult] = []
+        for text in texts:
+            res.append(await cls.get(text))
+        return res
+
+    @classmethod
+    async def get_many_in_dict(cls, texts: list[str]) -> dict[str, SearchResult]:
+        res: dict[str, SearchResult] = {}
+        for text in texts:
+            res[text] = await cls.get(text)
+        return res
+
+    def get_result_stats_text(self) -> str:
+        return f'{"Найдена" if len(self.spare_parts) == 0 else "Найдено"} <code>{len(self.spare_parts)}</code> {morph.parse("запчасть")[0].make_agree_with_number(len(self.spare_parts)).word} <code>{len(self.brands)}</code> {morph.parse("бренд")[0].lexeme[1].make_agree_with_number(len(self.brands)).word}'
+
+    def get_result_stats_text_for_brand(self, brand_uid: str) -> str:
+        count = len(self.filter_brand(brand_uid))
+        return f'{"Найдена" if count == 0 else "Найдено"} <code>{count}</code> запчастей бренда <code>{self.find_brand(brand_uid).name}</code>'

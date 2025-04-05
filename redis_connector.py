@@ -6,7 +6,7 @@ redis_client: Redis = Redis(connection_pool=pool)  # Direct instance
 
 async def connect_redis():
     """Initialize connection explicitly"""
-    await redis_client.ping()  # Test connection
+    await redis_client.ping()
 
 async def close_redis():
     """Close connection and pool"""

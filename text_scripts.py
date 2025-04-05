@@ -1,9 +1,10 @@
 from asyncio import sleep
-from datetime import datetime
 from aiogram.enums import ContentType
 from aiogram.filters import Command
-from classes import User, Query, SparePart
+from classes import User, SingleQuery
 from aiogram import types, F
+
+from classes.multiquery import MultiQuery
 from config import is_command, text_of_contacts_message
 from create_bot import dp, bot
 from filters import StateFilter
@@ -14,7 +15,7 @@ async def cannot_use_command(message: types.Message):
     await message.delete()
     text = 'Сначала введите поисковой запрос в поле "сообщение"!' if User.get_by_id(
         message.from_user.id).state.startswith(
-        'TYPING QUERY') else 'Напишите сообщение обратной связи сообщение обратной свази!'
+        'TYPING QUERY') else 'Напишите сообщение обратной связи!'
     temp_msg = await message.answer(f'{text}')
     await sleep(5)
     await temp_msg.delete()
@@ -55,18 +56,43 @@ async def contacts(message: types.Message):
 
 
 async def query_message(message: types.Message, user: User):
-    if len(message.text) < 4:
-        await message.reply('Минимальная длина запроса - 4 символа!')
-        return
+    query_type = user.state.split()[-1]
     user.state = 'NONE'
     await message.delete()
     await bot.edit_message_text('Запрос обрабатывается, это займёт меньше минуты...', chat_id=message.from_user.id, message_id=user.id_of_message_promoter_to_type)
-    query = Query.create(message.from_user.id, message.text, user.id_of_message_promoter_to_type)
-    user.previous_query = message.text
-    result = await query.get_result()
-    text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{message.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{message.text}"!'
-    await bot.edit_message_text(text, chat_id=user.id, message_id=user.id_of_message_promoter_to_type,
-                                reply_markup=result.brands_pages_keyboard(1))
+    match query_type:
+        case 'single':
+            if len(message.text) < 4:
+                await message.reply('Минимальная длина запроса - 4 символа!')
+                return
+            query = SingleQuery.create(message.from_user.id, message.text)
+            user.previous_query = message.text
+            result = await query.get_result()
+            text = f'Запрос: <code>{message.text}</code>\n\n' + result.get_result_stats_text()
+            await bot.edit_message_text(text, parse_mode='HTML', chat_id=user.id, message_id=user.id_of_message_promoter_to_type,
+                                        reply_markup=result.brands_pages_keyboard(1))
+        case 'multi':
+            general_text = 'Статистика мультизапроса:'
+            texts = message.text.split('\n')
+            right_texts = []
+            for text in texts:
+                if len(text) < 4:
+                    continue
+                right_texts.append(text)
+            query = MultiQuery.create(user.id, right_texts)
+            results = await query.get_results_in_dict()
+            await bot.delete_message(user.id, user.id_of_message_promoter_to_type)
+            for query_text, query_result in results.items():
+                message_text = f'Запрос: <code>{query_text}</code>\n\n' + query_result.get_result_stats_text()
+                markup = query_result.brands_pages_keyboard(1)
+                await message.answer(message_text, parse_mode='HTML', reply_markup=markup)
+            for i, text in enumerate(texts, 1):
+                general_text += f'\n{i}. <code>{text}</code> - '
+                if len(text) < 4:
+                    general_text += '❌ запрос не обработан, минимальная длина запроса - <code>4</code>.'
+                else:
+                    general_text += '✅ запрос обработан корректно.'
+            await message.answer(general_text, parse_mode='HTML', reply_markup=query.general_message_keyboard)
 
 
 async def feedback(message: types.Message, user: User):
@@ -83,7 +109,7 @@ async def feedback(message: types.Message, user: User):
 async def feedback_msg(message: types.Message, user: User):
     user.state = 'NONE'
     await bot.edit_message_reply_markup(chat_id=user.id, message_id=user.id_of_message_promoter_to_type)
-    await message.answer('Спасибо за то, что даёте обратную связь, возможно мы прислушаемся к вам!')
+    await message.answer('Спасибо за то, что даёте обратную связь, возможно, мы прислушаемся к вам!')
     await message.forward(-1001778865158)
 
 
@@ -117,11 +143,11 @@ async def search(message: types.Message, user: User):
     markup = query_keyboard(user, 'single')
     user.id_of_message_promoter_to_type = (
         await message.answer("Отправьте поисковой запрос!", reply_markup=markup)).message_id
-    user.state = 'TYPING QUERY'
+    user.state = 'TYPING QUERY single'
     await message.delete()
 
 
-async def no(message: types.Message):
+async def no(_):
     pass
 
 
@@ -129,9 +155,9 @@ async def problem_with_username(message: types.Message):
     if is_command(message) is not None:
         await message.delete()
     await message.answer(
-        'Извините, но я не могу с вами работать, так как у вас нету имени пользователя в Telegram!\nПожалуйста добавьте имя полльзователя в настройках профиля и приходите обратно!\nСпасибо за понимание!')
+        'Извините, но я не могу с вами работать, так как у вас нет имени пользователя в Telegram!\nПожалуйста добавьте имя пользователя в настройках профиля и приходите обратно!\nСпасибо за понимание!')
     #
-    # await message.answer('Извините, но я не могу с вами работать, так как у вас нету имени пользователя в Telegram!\nПожалуйста добавьте имя полльзователя в настройках профиля и приходите обратно!\nСпасибо за понимание!')
+    # await message.answer('Извините, но я не могу с вами работать, так как у вас нет имени пользователя в Telegram!\nПожалуйста добавьте имя пользователя в настройках профиля и приходите обратно!\nСпасибо за понимание!')
 
 
 # async def set_phone(message: types.Message):
@@ -140,7 +166,7 @@ async def problem_with_username(message: types.Message):
 #     await client.disconnect()
 #     await message.delete()
 #     if acc.phone is None:
-#         await message.answer('Извините, но я не знаю вашего номера телефона!\nЧтобы я его увидел пожалуйста зайдите в настройки приватности и включите видимость номера телефона для всех, для всех!\nЗатем зайдите в бота и используйте команду /setphone, я должен написать что номер сохранён!\nПосле моего подтверждение, что номер сохрвнён вы можете выключать видимость номера обратно, если хотите конечно!')
+#         await message.answer('Извините, но я не знаю вашего номера телефона!\nЧтобы я его увидел пожалуйста зайдите в настройки приватности и включите видимость номера телефона для всех, для всех!\nЗатем зайдите в бота и используйте команду /setphone, я должен написать что номер сохранён!\nПосле моего подтверждение, что номер сохранён вы можете выключать видимость номера обратно, если хотите конечно!')
 #     else:
 #         user.phone = acc.phone
 #         await message.answer(f'Номер +{acc.phone} сохранён!')
@@ -189,14 +215,14 @@ async def delete_me(message: types.Message):
 async def delete_all(message: types.Message):
     await message.delete()
     User.delete_all()
-    Query.delete_all()
+    SingleQuery.delete_all()
     await message.answer('ALL DELETED')
 
 
 async def get_a_q_command(_):
     json_list = []
-    for q in Query.get_all():
-        json_list.append(q.to_JSON())
+    for q in SingleQuery.get_all():
+        json_list.append(q.to_json())
     print(json_list)
 
 
@@ -207,7 +233,7 @@ def reg_handlers():
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
     dp.message.register(contact, StateFilter('SENDING CONTACT'),
                         F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
-    dp.message.register(query_message, StateFilter('TYPING QUERY'),
+    dp.message.register(query_message, StateFilter('TYPING QUERY', True),
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
     dp.message.register(feedback_msg, StateFilter('TYPING FEEDBACK'),
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))

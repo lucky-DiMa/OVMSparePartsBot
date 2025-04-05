@@ -1,8 +1,11 @@
+from .brand import Brand
+from .classproperty import classproperty
+from .json_serializable_object import JsonSerializableObject
+from .mongo_db_object import MongoDBObject
+from .multiquery import MultiQuery
+from .photo import Photo
+from .redis_object import RedisObject
+from .search_result import SearchResult
+from .singlequery import SingleQuery
 from .spare_part import SparePart
 from .user import User
-from .query import Query
-from .photo import Photo
-from .search_result import SearchResult
-from .brand import Brand
-from .json_serializable_object import JsonSerializableObject
-# from .classproperty import classproperty

@@ -1,10 +1,12 @@
-class ClassPropertyDescriptor(object):
+from typing import Callable, Any
 
-    def __init__(self, f_get, f_set=None):
+
+class ClassPropertyDescriptor[T]:
+    def __init__(self, f_get: Callable[..., T], f_set=None):
         self.f_get = f_get
         self.f_set = f_set
 
-    def __get__(self, obj, klass=None):
+    def __get__(self, obj, klass=None) -> T:
         if klass is None:
             klass = type(obj)
         return self.f_get.__get__(obj, klass)()
@@ -21,8 +23,8 @@ class ClassPropertyDescriptor(object):
         self.f_set = func
         return self
 
-def classproperty(func):
+
+def classproperty[T](func: Callable[..., T]) -> ClassPropertyDescriptor[T]:
     if not isinstance(func, (classmethod, staticmethod)):
         func = classmethod(func)
-
     return ClassPropertyDescriptor(func)

@@ -1,24 +1,26 @@
 from aiogram.enums import ChatAction
 from aiogram import types, F
-from classes import Query, SparePart, User, Photo, Brand
+from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult
+from classes.multiquery import MultiQuery
 from config import text_of_contacts_message
 from create_bot import dp, bot
 from filters import StateFilter
 from keyboards import query_keyboard
+from query_utils import get_query_text
 
 
-async def callback_for_search_something_btn(query: types.CallbackQuery, user: User):
-    await query.message.edit_text('Запрос обрабатывается, это займёт меньше минуты...')
-    user.state = 'NONE'
-    search_query = Query.create(query.from_user.id, query.data.split('"')[-2], query.message.message_id)
-    result = await search_query.get_result()
-    text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
-    await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(1))
+# async def callback_for_search_something_btn(query: types.CallbackQuery, user: User):
+#     await query.message.edit_text('Запрос обрабатывается, это займёт меньше минуты...')
+#     user.state = 'NONE'
+#     search_query = SingleQuery.create(query.from_user.id, query.data.split('"')[-2], query.message.message_id)
+#     result = await search_query.get_result()
+#     text = f'Запрос: <code>{query_text}</code>\n\n' + result.get_result_stats_text()
+#     await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(1))
 
 
 async def callback_for_goto_sp_page_buttons(query: types.CallbackQuery):
-    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    result = await search_query.get_result()
+    query_text = get_query_text(query.message)
+    result = await SearchResult.get(query_text)
     new_page_n = int(query.data.split()[-2])
     if new_page_n == 0:
         await query.answer('Вы находитесь на первой странице!', True)
@@ -53,14 +55,14 @@ async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
     await query.answer()
     await bot.send_chat_action(query.from_user.id, ChatAction.TYPING)
     n = int(query.data.split()[-1])
-    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    result = await search_query.get_result()
+    query_text = get_query_text(query.message)
+    result = await SearchResult.get(query_text)
     sp = await result.spare_parts[n].get_full_info()
-    text = f'Запрос: "<code>{search_query.text}</code>".\nБренд: "<code>{sp.brand.name}</code>"\nНаименование: "<code>{sp.name}</code>"\nАртикул: "<code>{sp.code}</code>"\n\n'
+    text = f'Запрос: <code>{query_text}</code>.\nБренд: <code>{sp.brand.name}</code>\nНаименование: <code>{sp.name}</code>\nАртикул: <code>{sp.code}</code>\n\n'
     if sp.counts:
         text += 'В наличии:\n'
     else:
-        text += 'Нет в наличии. '
+        text += 'Нет в наличии.'
     for count in sp.counts:
         text += f"{count}\n"
     try:
@@ -97,6 +99,7 @@ async def callback_for_help_typing_query_btn(query: types.CallbackQuery, user: U
 
 async def callback_for_set_query_type_button(query: types.CallbackQuery, user: User):
     new_type: str = query.data.split(' ')[-1]
+    user.state = f"TYPING QUERY {new_type}"
     await query.answer()
     await query.message.edit_reply_markup(reply_markup=query_keyboard(user, new_type))
 
@@ -107,10 +110,11 @@ async def callback_for_contacts_btn(query: types.CallbackQuery):
 
 async def callback_for_choose_brand_buttons(query: types.CallbackQuery):
     brand_uid = query.data.split('"')[-2]
-    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    result = await search_query.get_result()
+    query_text = get_query_text(query.message)
+    result = await SearchResult.get(query_text)
     await query.message.edit_text(
-        f'{len(result.filter_brand(brand_uid))} запчастей бренда {result.find_brand(brand_uid).name} по запросу "{search_query.text}":',
+        f'Запрос: <code>{query_text}</code>\n\n' + result.get_result_stats_text_for_brand(brand_uid),
+        parse_mode='HTML',
         reply_markup=result.sp_pages_of_brand_keyboard(brand_uid, 1))
 
 
@@ -141,13 +145,13 @@ async def problem_with_username(query: types.CallbackQuery):
 
 async def callback_for_page_number_button(query: types.CallbackQuery):
     await query.answer(
-        f'Вы находитесь на странице №{query.message.reply_markup.inline_keyboard[-3][1].text.split(" / ")[0]} из {query.message.reply_markup.inline_keyboard[-3][1].text.split(" / ")[1]}')
+        f'Вы находитесь на странице №{query.message.reply_markup.inline_keyboard[-1][1].text.split(" / ")[0]} из {query.message.reply_markup.inline_keyboard[-1][1].text.split(" / ")[1]}')
 
 
 async def callback_for_goto_brands_page_buttons(query: types.CallbackQuery):
     new_page_n = int(query.data.split()[-1])
-    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    result = await search_query.get_result()
+    query_text = get_query_text(query.message)
+    result = await SearchResult.get(query_text)
     if new_page_n == 0:
         await query.answer('Вы находитесь на первой странице!', True)
         return
@@ -165,10 +169,11 @@ async def not_registered(query: types.CallbackQuery):
 
 async def callback_for_back_to_brands_button(query: types.CallbackQuery):
     page_n = int(query.data.split()[-1])
-    search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
-    result = await search_query.get_result()
-    text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
-    await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(page_n))
+    query_text = get_query_text(query.message)
+    result = await SearchResult.get(query_text)
+    text = f'Запрос: <code>{query_text}</code>\n\n' + result.get_result_stats_text()
+    await query.message.edit_text(text,
+        parse_mode='HTML', reply_markup=result.brands_pages_keyboard(page_n))
 
 
 async def send_contact(query: types.CallbackQuery, user: User):
@@ -186,33 +191,40 @@ async def send_contact(query: types.CallbackQuery, user: User):
 #     text = f'Найдено {len(result.spare_parts)} запчаст{"ь" if len(result.spare_parts) == 1 else "и"} {len(result.brands)} бренд{"а" if len(result.brands) == 1 else "ов"} по запросу "{search_query.text}":' if len(result.spare_parts) > 0 else f'Не найдено запчастей по запросу "{search_query.text}"!'
 #     await query.message.edit_text(text, reply_markup=result.brands_pages_keyboard(1))
 
+async def callback_for_export_mq_to_excel_button(query: types.CallbackQuery, user: User):
+    mq = MultiQuery.get_by_id(int(query.data.split()[-1]))
+    await bot.send_chat_action(user.id, 'upload_document')
+    await mq.export_results_to_excel()
+    await query.message.answer_document(types.FSInputFile('result.xlsx',
+                                                          f'Мультизапрос #{mq._id}.xlsx'))
+
 
 def reg_handlers():
     dp.callback_query.register(problem_with_username, lambda query: query.from_user.username is None)
     dp.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
     dp.callback_query.register(send_contact, lambda _, user: user.state == 'SENDING CONTACT')
     dp.callback_query.register(callback_for_help_typing_query_btn, F.data == 'HELP TYPING QUERY', flags={
-            'state_filter': StateFilter("TYPING QUERY"),
+            'state_filter': StateFilter("TYPING QUERY", True),
             "check_state_message": True,
             "state_error_message": 'Вы сейчас не отправляете запрос!'
         })
     dp.callback_query.register(callback_for_cancel_typing_query_btn, F.data == 'CANCEL TYPING QUERY', flags={
-            'state_filter': StateFilter("TYPING QUERY"),
+            'state_filter': StateFilter("TYPING QUERY", True),
             "check_state_message": True,
             "state_error_message": 'Вы сейчас не отправляете запрос!'
         })
     dp.callback_query.register(callback_for_set_query_type_button,
                                lambda query: query.data.startswith('SET_QUERY_TYPE '), flags={
-            'state_filter': StateFilter("TYPING QUERY"),
+            'state_filter': StateFilter("TYPING QUERY", True),
             "check_state_message": True,
             "state_error_message": 'Вы сейчас не отправляете запрос!'
         })
-    dp.callback_query.register(callback_for_search_something_btn,
-                               lambda query: query.data.startswith('SEARCH "'), flags={
-            'state_filter': StateFilter("TYPING QUERY"),
-            "check_state_message": True,
-            'state_error_message': 'Вы сейчас не отправляете запрос!'
-        })
+    # dp.callback_query.register(callback_for_search_something_btn,
+    #                            lambda query: query.data.startswith('SEARCH "'), flags={
+    #         'state_filter': StateFilter("TYPING QUERY"),
+    #         "check_state_message": True,
+    #         'state_error_message': 'Вы сейчас не отправляете запрос!'
+    #     })
     dp.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK', flags={
         'state_filter': StateFilter("TYPING FEEDBACK"),
         "check_state_message": True,
@@ -234,3 +246,5 @@ def reg_handlers():
                                lambda query: query.data.startswith('SHOW '))
     dp.callback_query.register(callback_for_back_to_brands_button,
                                lambda query: query.data.startswith('BACK TO BRANDS '))
+    dp.callback_query.register(callback_for_export_mq_to_excel_button,
+                               lambda query: query.data.startswith('EXPORT MQ XLSX '))

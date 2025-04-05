@@ -19,4 +19,4 @@ def is_command(message: Message):
     return None
 
 
-text_of_contacts_message = 'Режим работы: Пн-пт: 08:00 - 17:00, сб-вс: выходной\nНаши контакты:\nРоманченко Сергей Олегович: +79122308359\nEmail: Rso@ovm.group'
+text_of_contacts_message = 'Режим работы: Пн-пт: 08:00 - 17:00, сб-вс: выходной\nНаши контакты:\nОрлов Антон Викторович: +79827611859\nEmail: oav@ovm.group'

@@ -18,7 +18,7 @@ class Brand(RedisObject):
             return redis_result
         for brands_dict in get_brands()["brands"]:
             if brands_dict["uid"] == uid:
-                self = cls.from_JSON(brands_dict)
+                self = cls.from_json(brands_dict)
                 await self.save_to_redis()
                 return self
         return None
@@ -27,7 +27,7 @@ class Brand(RedisObject):
     def get_all_brands_dict(cls) -> dict[str, Brand]:
         result: dict[str, Brand] = {}
         for brands_dict in get_brands()["brands"]:
-            result[brands_dict["uid"]] = Brand.from_JSON(brands_dict)
+            result[brands_dict["uid"]] = Brand.from_json(brands_dict)
         return result
 
     def __repr__(self):
@@ -35,4 +35,4 @@ class Brand(RedisObject):
 
 
 if __name__ == '__main__':
-    print(Brand.from_JSON(Brand('abc', 'abc-name').to_JSON()).to_JSON())
+    print(Brand.from_json(Brand('abc', 'abc-name').to_json()).to_json())

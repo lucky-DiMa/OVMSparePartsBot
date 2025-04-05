@@ -1,6 +1,8 @@
 from aiogram import types
 from classes import User
-from classes.query import query_type_name
+from query_utils import query_type_name
+
+
 def query_keyboard(user: User, type_: str) -> types.InlineKeyboardMarkup:
     next_type = list(query_type_name.keys())[(list(query_type_name.keys()).index(type_) + 1) % len(list(query_type_name.keys()))]
     inline_kb = []
@@ -11,6 +13,5 @@ def query_keyboard(user: User, type_: str) -> types.InlineKeyboardMarkup:
     inline_kb.append([types.InlineKeyboardButton(text='<< ПОМОЩЬ >>', callback_data=f'HELP TYPING QUERY {type_}')])
     inline_kb.append([types.InlineKeyboardButton(text='<< ОТМЕНА >>',
                                                  callback_data='CANCEL TYPING QUERY')])
-
     markup = types.InlineKeyboardMarkup(inline_keyboard=inline_kb)
     return markup
