@@ -225,6 +225,10 @@ async def get_a_q_command(_):
         json_list.append(q.to_json())
     print(json_list)
 
+async def help_command(message: types.Message, user: User):
+    await message.delete()
+    await message.answer(user.help_message_text, parse_mode='HTML')
+
 
 def reg_handlers():
     dp.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
@@ -238,6 +242,7 @@ def reg_handlers():
     dp.message.register(feedback_msg, StateFilter('TYPING FEEDBACK'),
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
     dp.message.register(start, Command('start'), F.content_type == ContentType.TEXT)
+    dp.message.register(help_command, Command('help'), F.content_type == ContentType.TEXT)
     dp.message.register(feedback, Command('feedback'), F.content_type == ContentType.TEXT)
     dp.message.register(search, Command('search'), F.content_type == ContentType.TEXT)
     dp.message.register(delete_me, lambda message: message.from_user.id == 1358414277, Command('delete_me'),

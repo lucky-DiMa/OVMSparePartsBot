@@ -19,7 +19,7 @@ WEBHOOK_SECRET = str(randint(1, 1000000))
 
 async def on_startup_webhook() -> None:
     await connect_redis()
-    await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_TOKEN=WEBHOOK_SECRET)
+    await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
 
 async def on_shutdown() -> None:
     await close_redis()
@@ -32,7 +32,7 @@ def start_bot_webhook() -> None:
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
         bot=bot,
-        secret_TOKEN=WEBHOOK_SECRET,
+        secret_token=WEBHOOK_SECRET,
     )
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)

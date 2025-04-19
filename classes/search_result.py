@@ -6,10 +6,10 @@ from icecream import ic
 
 import requests_to_bd
 from setup_morphy import morph
-from . import SparePart
-from .brand import Brand
-from .redis_object import RedisObject
-from .spare_part import SparePartStripped
+from classes.spare_part import SparePart
+from classes.brand import Brand
+from classes.redis_object import RedisObject
+from classes.spare_part import SparePartStripped
 
 
 class TooShortQueryException(Exception):
