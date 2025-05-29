@@ -52,6 +52,18 @@ def get_image_by_id(img_id: str | int):
     return loads(response.text)
 
 
+def get_analogs_by_code(code: str):
+    """
+    :rtype :dict
+    """
+    response = requests.post('http://rdp.ovm.group:33900', json={"operation":"scan3",
+                                                                 "shk": code,
+                                                                 "app":"WH-mobile",
+                                                                 "organization":"ООО \"ОМ партс\"",
+                                                                 "useruid":"64b432f6-705a-11ec-9171-001b21e4770b"})
+    return loads(response.text)
+
+
 def get_brands():
     response = requests.post('http://rdp.ovm.group:33900', json={"operation": "getbrands",
                                                                  "organization": "ООО \"ОМ партс\"",
@@ -62,5 +74,6 @@ def get_brands():
 if __name__ == '__main__':
     # pprint(get_brands())
     pprint(get_parts_by_text(input('TEXT: ')))
-    pprint(get_brands())
-    # pprint(get_part_by_code(input('code: '), input('B_ID: ')))
+    # pprint(get_analogs_by_code(input('CODE: '))['item']['analogs'])
+    # pprint(get_brands())
+    # pprint(get_part_by_code(input('code: ')))

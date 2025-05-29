@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from aiogram import types
+
 from classes.mongo_db_object import MongoDBObject
 from config import MANUAL_URL
-from mongo_connector import mongo_db
+from create_bot import bot
 
 
 class User(MongoDBObject):
@@ -90,8 +92,11 @@ class User(MongoDBObject):
             return None
         return cls.from_json(user_dict)
 
+    def delete(self):
+        self.__class__.delete_by_id(self.id)
+
     @classmethod
-    def del_by_id(cls, tg_id: int):
+    def delete_by_id(cls, tg_id: int):
         cls.collection.delete_one({"id": tg_id})
         
     @classmethod
@@ -110,3 +115,28 @@ class User(MongoDBObject):
                 text += f'\n{command_name} - {command_info.explanation}'
         text += f'\n\nНужна помощь? Прочитайте наше <a href="{MANUAL_URL}">руководство пользования</a>.'
         return text
+
+    async def send_message(self, text: str, reply_to_message_id: int | None = None,
+                           markup: types.InlineKeyboardMarkup | types.ReplyKeyboardMarkup | None = None) -> types.Message:
+            return await bot.send_message(self.id, text, reply_to_message_id=reply_to_message_id, reply_markup=markup,
+                                          parse_mode='HTML')
+
+    async def send_photo(self, document: types.FSInputFile | types.URLInputFile, caption:  str, reply_to_message_id: int | None = None, reply_markup: types.InlineKeyboardMarkup | types.ReplyKeyboardMarkup | None = None):
+        await bot.send_photo(self.id, document, caption=caption, parse_mode="HTML", reply_markup=reply_markup,
+                             reply_to_message_id=reply_to_message_id)
+
+    async def send_video(self, document: types.FSInputFile | types.URLInputFile, caption:  str, reply_to_message_id: int | None = None, reply_markup: types.InlineKeyboardMarkup | types.ReplyKeyboardMarkup | None = None):
+        await bot.send_video(self.id, document, caption=caption, parse_mode="HTML", reply_markup=reply_markup,
+                             reply_to_message_id=reply_to_message_id)
+
+    async def send_audio(self, document: types.FSInputFile | types.URLInputFile, caption:  str, reply_to_message_id: int | None = None, reply_markup: types.InlineKeyboardMarkup | types.ReplyKeyboardMarkup | None = None):
+        await bot.send_audio(self.id, document, caption=caption, parse_mode="HTML", reply_markup=reply_markup,
+                             reply_to_message_id=reply_to_message_id)
+
+    async def send_document(self, document: types.FSInputFile | types.URLInputFile, caption:  str, reply_to_message_id: int | None = None, reply_markup: types.InlineKeyboardMarkup | types.ReplyKeyboardMarkup | None = None):
+        await bot.send_document(self.id, document, caption=caption, parse_mode="HTML", reply_markup=reply_markup,
+                                reply_to_message_id=reply_to_message_id)
+
+    async def send_media_group(self, media_list: list[types.InputMediaAudio | types.InputMediaDocument | types.InputMediaPhoto | types.InputMediaVideo], reply_to_message_id: int | None = None):
+        await bot.send_media_group(self.id, media_list,
+                                   reply_to_message_id=reply_to_message_id)

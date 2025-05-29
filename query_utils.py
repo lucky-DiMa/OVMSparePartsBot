@@ -1,8 +1,8 @@
 from aiogram import types
 
 
-query_type_name = {"single": 'обычный',
-                   "multi": "мульти"}
+query_type_name = {"single": 'один запрос',
+                   "multi": "много запросов"}
 
 def get_query_type(message: types.Message):
     if len(message.reply_markup.inline_keyboard) < 2:

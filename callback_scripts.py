@@ -1,6 +1,6 @@
 from aiogram.enums import ChatAction
 from aiogram import types, F
-from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult
+from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult, AnalogSearchResult
 from classes.multiquery import MultiQuery
 from config import text_of_contacts_message
 from create_bot import dp, bot
@@ -51,39 +51,14 @@ async def callback_for_goto_sp_page_buttons(query: types.CallbackQuery):
 # await query.message.delete()
 
 
-async def callback_for_show_spare_part_btns(query: types.CallbackQuery):
+async def callback_for_show_spare_part_buttons(query: types.CallbackQuery, user: User):
     await query.answer()
     await bot.send_chat_action(query.from_user.id, ChatAction.TYPING)
     n = int(query.data.split()[-1])
     query_text = get_query_text(query.message)
     result = await SearchResult.get(query_text)
     sp = await result.spare_parts[n].get_full_info()
-    text = f'Запрос: <code>{query_text}</code>.\nБренд: <code>{sp.brand.name}</code>\nНаименование: <code>{sp.name}</code>\nАртикул: <code>{sp.code}</code>\n\n'
-    if sp.counts:
-        text += 'В наличии:\n'
-    else:
-        text += 'Нет в наличии.'
-    for count in sp.counts:
-        text += f"{count}\n"
-    try:
-        if len(sp.photos) == 1:
-            await query.message.answer_photo(types.FSInputFile(sp.photos[0].download()), text, parse_mode='HTML')
-        elif len(sp.photos) == 0:
-            await query.message.answer(text, parse_mode='HTML')
-        else:
-            media_list = []
-            for i, photo in enumerate(sp.photos):
-                if i == 0:
-                    media_list.append(
-                        types.InputMediaPhoto(media=types.FSInputFile(photo.download()), caption=text, parse_mode='HTML'))
-                    continue
-                media_list.append(types.InputMediaPhoto(media=types.FSInputFile(photo.download())))
-            await query.message.answer_media_group(media=media_list)
-    except Exception as e:
-        await query.message.answer(text + '\n\nОшибка, недопустимый размер изображения! Изображение не подгружено!\n\n' + str(e),
-                                   parse_mode='HTML')
-    for photo in sp.photos:
-        photo.remove()
+    await sp.send_info_to_user(user)
 
 
 async def callback_for_cancel_typing_query_btn(query: types.CallbackQuery, user: User):
@@ -118,7 +93,7 @@ async def callback_for_choose_brand_buttons(query: types.CallbackQuery):
         reply_markup=result.sp_pages_of_brand_keyboard(brand_uid, 1))
 
 
-async def callback_for_start_btn(query: types.CallbackQuery, user: User):
+async def callback_for_start_button(query: types.CallbackQuery, user: User):
     if user.state != 'NONE':
         await query.answer(user.end_type_text, True)
         return
@@ -183,6 +158,40 @@ async def send_contact(query: types.CallbackQuery, user: User):
         resize_keyboard=True)
     await query.message.answer(user.end_type_text, reply_markup=markup)
 
+async def callback_for_show_analog_sp_buttons(query: types.CallbackQuery, user: User):
+    await query.answer()
+    n = int(query.data.split()[-1])
+    code = query.message.text.split('\n')[1].split()[-1]
+    res = await AnalogSearchResult.get_by_code(code)
+    if not res:
+        await query.message.delete_reply_markup()
+        await query.message.edit_text('Запчасть, для которой вы искали аналоги не найдена!')
+        return
+    if len(res.analogs) <= n:
+        await query.message.delete_reply_markup()
+        await query.message.edit_text('Произошла ошибка, попробуйте поискать аналоги для этой запчасти ещё раз!')
+        return
+    sp = await res.analogs[n].get_full_info()
+    await sp.send_info_to_user(user)
+
+async def callback_for_goto_asp_page_buttons(query: types.CallbackQuery):
+    new_page_n = int(query.data.split()[-1])
+    code = query.message.text.split('\n')[1].split()[-1]
+    res = await AnalogSearchResult.get_by_code(code)
+    if not res:
+        await query.answer()
+        await query.message.delete_reply_markup()
+        await query.message.edit_text('Запчасть, для которой вы искали аналоги не найдена!')
+        return
+    if new_page_n < 0:
+        await query.answer('Вы находитесь на первой странице', True)
+    elif new_page_n >= res.pages_count:
+        await query.answer('Вы находитесь на последней странице', True)
+    else:
+        await query.answer()
+    new_page_n = max(0, min(new_page_n, res.pages_count - 1))
+    await query.message.edit_reply_markup(reply_markup=res.keyboard(new_page_n))
+
 
 # async def callback_for_reload_results_button(query: types.CallbackQuery):
 #     search_query = Query.get_by_from_user_id_and_message_id(query.from_user.id, query.message.message_id)
@@ -231,19 +240,23 @@ def reg_handlers():
         "state_error_message": 'Вы сейчас не отправляете сообщение обратной связи!'
     })
     # dp.callback_query.register(callback_for_reload_results_button, F.data == 'RELOAD RESULTS')
-    dp.callback_query.register(callback_for_start_btn,
+    dp.callback_query.register(callback_for_start_button,
                                lambda query: query.data.startswith('SEARCH'))
     dp.callback_query.register(callback_for_goto_sp_page_buttons,
                                lambda query: query.data.startswith('GOTO SP PAGE '))
+    dp.callback_query.register(callback_for_goto_asp_page_buttons,
+                               lambda query: query.data.startswith('GOTO ASP PAGE '))
     dp.callback_query.register(callback_for_goto_brands_page_buttons,
                                lambda query: query.data.startswith('GOTO BRANDS PAGE '))
-    dp.callback_query.register(callback_for_page_number_button, F.data == 'PAGE NUMBER')
+    dp.callback_query.register(callback_for_page_number_button, lambda query: query.data.startswith('PAGE NUMBER'))
     dp.callback_query.register(callback_for_contacts_btn, F.data == 'CONTACTS')
     dp.callback_query.register(callback_for_need_new_brand_btn, F.data == 'NEED NEW BRAND')
     dp.callback_query.register(callback_for_choose_brand_buttons,
                                lambda query: query.data.startswith('CHOOSE BRAND "'))
-    dp.callback_query.register(callback_for_show_spare_part_btns,
-                               lambda query: query.data.startswith('SHOW '))
+    dp.callback_query.register(callback_for_show_spare_part_buttons,
+                               lambda query: query.data.startswith('SHOW SP '))
+    dp.callback_query.register(callback_for_show_analog_sp_buttons,
+                               lambda query: query.data.startswith('SHOW ASP '))
     dp.callback_query.register(callback_for_back_to_brands_button,
                                lambda query: query.data.startswith('BACK TO BRANDS '))
     dp.callback_query.register(callback_for_export_mq_to_excel_button,

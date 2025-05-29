@@ -9,3 +9,4 @@ from .search_result import SearchResult
 from .singlequery import SingleQuery
 from .spare_part import SparePart
 from .user import User
+from .analog_search_result import AnalogSearchResult, Analog

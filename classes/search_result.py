@@ -102,7 +102,7 @@ class SearchResult(RedisObject):
     def sp_pages_of_brand_keyboard(self, brand_uid: str, page_n: int):
         inline_kb = []
         for sp in self.get_sp_page_of_brand_by_n(brand_uid, page_n):
-            inline_kb.append([types.InlineKeyboardButton(text=sp.name, callback_data=f'SHOW SP {self.__index_of_sp(sp.code, sp.brand.uid)}')])
+            inline_kb.append([types.InlineKeyboardButton(text=sp.name[:min(20, len(sp.name))] + ('...' if len(sp.name) > 20 else ''), callback_data=f'SHOW SP {self.__index_of_sp(sp.code, sp.brand.uid)}')])
         if self.pages_count_of_brand(brand_uid) > 1:
             inline_kb.append([
                 types.InlineKeyboardButton(text='<<', callback_data=f'GOTO SP PAGE {page_n - 1} "{brand_uid}"'),
@@ -120,7 +120,7 @@ class SearchResult(RedisObject):
                 return spare_part
         return None
 
-    def __index_of_sp(self, code: str, brand_uid: str):
+    def __index_of_sp(self, code: str, brand_uid: str) -> int:
         for i, sp in enumerate(self.spare_parts):
             if sp.brand.uid == brand_uid and sp.code == code:
                 return i

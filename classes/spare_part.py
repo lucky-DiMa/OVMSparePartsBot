@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from aiogram.types import FSInputFile, InputMediaPhoto
+
+from create_bot import bot
 import requests_to_bd
+from classes.user import User
 from classes.json_serializable_object import JsonSerializableObject
 from classes.photo import Photo
 from classes.brand import Brand
@@ -59,6 +63,54 @@ class SparePart(RedisObject):
     @property
     def stripped(self):
         return SparePartStripped(self.brand, self.name, self.code)
+
+    async def info_text(self) -> str:
+        text = f'Артикул: <code>{self.code}</code>\nНаименование: <code>{self.name}</code>\nБренд: <code>{self.brand.name}</code>\n\n'
+        if self.counts:
+            text += 'В наличии:\n'
+        else:
+            text += 'Нет в наличии.\n'
+        for count in self.counts:
+            text += f"{count}\n"
+        text += f'<a href="{await self.build_search_analogs_link()}">Искать аналоги</a>'
+        return text
+
+    async def export_images_to_telegram_media(self) -> list[InputMediaPhoto] | FSInputFile | None:
+        if len(self.photos) == 1:
+            return FSInputFile(self.photos[0].download())
+        elif len(self.photos) == 0:
+            return None
+        else:
+            media_list = []
+            for i, photo in enumerate(self.photos):
+                if i == 0:
+                    media_list.append(
+                        InputMediaPhoto(media=FSInputFile(photo.download()), caption=await self.info_text(),
+                                              parse_mode='HTML'))
+                    continue
+                media_list.append(InputMediaPhoto(media=FSInputFile(photo.download())))
+            return media_list
+
+    def remove_all_photos(self):
+        for photo in self.photos:
+            photo.remove()
+
+    async def send_info_to_user(self, user: User) -> None:
+        try:
+            payload = await self.export_images_to_telegram_media()
+            if not payload:
+                await user.send_message(await self.info_text())
+            elif isinstance(payload, FSInputFile):
+                await user.send_photo(payload, caption=await self.info_text())
+            else:
+                await user.send_media_group(payload)
+        except Exception:
+            await user.send_message(await self.info_text() + "\n\nПроизошла ошибка при загрузке изображений.")
+        finally:
+            self.remove_all_photos()
+
+    async def build_search_analogs_link(self) -> str:
+        return f'https://t.me/{(await bot.me()).username}?start=search-analogs--{self.code.replace(" ", "---space---")}'
 
 
 class SparePartStripped(JsonSerializableObject):

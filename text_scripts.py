@@ -1,7 +1,7 @@
 from asyncio import sleep
 from aiogram.enums import ContentType
-from aiogram.filters import Command
-from classes import User, SingleQuery
+from aiogram.filters import Command, CommandObject
+from classes import User, SingleQuery, AnalogSearchResult
 from aiogram import types, F
 
 from classes.multiquery import MultiQuery
@@ -22,18 +22,22 @@ async def cannot_use_command(message: types.Message):
     return
 
 
-async def start(message: types.Message, user_exists: bool, user: User):
+async def start(message: types.Message, user_exists: bool, user: User, command: CommandObject = None):
+    await message.delete()
     if not user_exists:
         user = User.reg(message.from_user.id)
+    if user.phone != "" and command and command.args.startswith('search-analogs--'):
+        res = await AnalogSearchResult.get_by_code(command.args.replace('search-analogs--', '').replace('---space---', ' '))
+        await message.answer(res.text, parse_mode='HTML', reply_markup=res.keyboard())
+        return
     markup = types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]],
                                        resize_keyboard=True)
     await message.answer(
-        f'Здравствуйте {message.from_user.full_name}!\nЯ бот компании ОМПартс, которая входит в группу компаний ТД Овоще-молочного, помогу вам с лёгкостью найти любую запчасть, если она есть в нашей БД!\n\n{"" if user.phone != "" else "Пожалуйста поделись со мной своим контактом Telegram с помощью кнопки ниже чтобы занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер то, к сожалению, вы не сможете использовать этого бота!"}',
+        f'Здравствуйте {message.from_user.full_name}!\nЯ бот компании ООО "ОМ партс", которая входит в группу компаний ТД "Овоще-молочный", помогу вам с лёгкостью найти любую запчасть, если она есть в нашей базе данных!\n\n{"" if user.phone != "" else "Пожалуйста, поделись со мной своим контактом Telegram с помощью кнопки ниже, чтобы я занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер, то, к сожалению, вы не сможете использовать этого бота!"}',
         reply_markup=None if user.phone != "" else markup)
 
     user.state = user.state if User.get_by_id(
         message.from_user.id).phone != "" else "SENDING CONTACT"
-    await message.delete()
 
 
 # async def get_ph(message: types.Message):
@@ -57,14 +61,17 @@ async def contacts(message: types.Message):
 
 async def query_message(message: types.Message, user: User):
     query_type = user.state.split()[-1]
+    if query_type == 'single' and len(message.text) < 4:
+        msg = await message.reply('Минимальная длина запроса - 4 символа!')
+        await sleep(10)
+        await message.delete()
+        await msg.delete()
+        return
     user.state = 'NONE'
     await message.delete()
     await bot.edit_message_text('Запрос обрабатывается, это займёт меньше минуты...', chat_id=message.from_user.id, message_id=user.id_of_message_promoter_to_type)
     match query_type:
         case 'single':
-            if len(message.text) < 4:
-                await message.reply('Минимальная длина запроса - 4 символа!')
-                return
             query = SingleQuery.create(message.from_user.id, message.text)
             user.previous_query = message.text
             result = await query.get_result()
@@ -208,7 +215,7 @@ async def restart_command(message: types.Message):
 
 
 async def delete_me(message: types.Message):
-    User.del_by_id(message.from_user.id)
+    User.delete_by_id(message.from_user.id)
     await message.delete()
 
 
@@ -224,17 +231,37 @@ async def get_a_q_command(_):
     for q in SingleQuery.get_all():
         json_list.append(q.to_json())
     print(json_list)
+    
 
 async def help_command(message: types.Message, user: User):
     await message.delete()
     await message.answer(user.help_message_text, parse_mode='HTML')
 
 
+async def get_analogs_command(message: types.Message, command: CommandObject):
+    res = await AnalogSearchResult.get_by_code(command.args)
+    await message.delete()
+    await message.answer(res.text, parse_mode='HTML', reply_markup=res.keyboard())
+
+
+async def cancel_command(message: types.Message, user: User):
+    if user.state == 'NONE':
+        await user.send_message('Я не просил вас ничего писать :)')
+    elif user.state in ["SENDING CONTACT"]:
+        user.delete()
+        await message.answer('Регистрация отменена!', reply_markup=types.ReplyKeyboardRemove())
+    else:
+        user.state = 'NONE'
+        await user.send_message('Действие отменено!')
+    await message.delete()
+    
+
 def reg_handlers():
     dp.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
     dp.message.register(problem_with_username, lambda message: message.from_user.username is None)
     dp.message.register(start, lambda _, user_exists: not user_exists,
                         F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
+    dp.message.register(cancel_command, Command('cancel'), F.content_type == ContentType.TEXT)
     dp.message.register(contact, StateFilter('SENDING CONTACT'),
                         F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
     dp.message.register(query_message, StateFilter('TYPING QUERY', True),
@@ -254,4 +281,5 @@ def reg_handlers():
     dp.message.register(restart_command, lambda message: message.from_user.id in [1358414277],
                         Command('restart'), F.content_type == ContentType.TEXT)
     dp.message.register(contacts, Command('contacts'), F.content_type == ContentType.TEXT)
+    dp.message.register(get_analogs_command, Command('get_analogs'), F.content_type == ContentType.TEXT)
     dp.message.register(all_messages)
