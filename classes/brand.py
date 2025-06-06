@@ -1,6 +1,6 @@
 from __future__ import annotations
 from classes.redis_object import RedisObject
-from requests_to_bd import get_brands
+from bot.requests_to_bd import get_brands
 
 class Brand(RedisObject):
     redis_collection_name = 'Brands'

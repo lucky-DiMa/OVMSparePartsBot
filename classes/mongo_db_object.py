@@ -4,7 +4,7 @@ from pymongo.collection import Collection
 
 from classes.json_serializable_object import JsonSerializableObject
 from classes.classproperty import classproperty
-from mongo_connector import mongo_db
+from utils import mongo_db
 
 
 class MongoDBObject(JsonSerializableObject):

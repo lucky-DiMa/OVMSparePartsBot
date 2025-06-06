@@ -4,7 +4,7 @@ from aiogram import types
 
 from classes.mongo_db_object import MongoDBObject
 from config import MANUAL_URL
-from create_bot import bot
+from bot import bot
 
 
 class User(MongoDBObject):
@@ -105,12 +105,12 @@ class User(MongoDBObject):
 
     @classmethod
     def exists_by_id(cls, tg_id: int):
-        return cls.collection.find_one({"id": tg_id}, cls.fields_keys) is not None
+        return cls.collection.find_one({"id": tg_id}) is not None
 
     @property
     def help_message_text(self) -> str:
         text = 'Вот список команд доступных для вас:'
-        from commands import commands
+        from bot.commands import commands
         for command_name, command_info in commands.items():
                 text += f'\n{command_name} - {command_info.explanation}'
         text += f'\n\nНужна помощь? Прочитайте наше <a href="{MANUAL_URL}">руководство пользования</a>.'

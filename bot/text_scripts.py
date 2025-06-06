@@ -3,9 +3,9 @@ from aiogram.enums import ContentType
 from aiogram.filters import Command, CommandObject
 from classes import User, SingleQuery, AnalogSearchResult
 from aiogram import types, F
-
-from classes.multiquery import MultiQuery
-from config import is_command, text_of_contacts_message
+from filters import is_command
+from classes import MultiQuery
+from config import text_of_contacts_message
 from create_bot import dp, bot
 from filters import StateFilter
 from keyboards import query_keyboard

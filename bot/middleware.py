@@ -1,6 +1,5 @@
 from aiogram.dispatcher.flags import get_flag
 
-from config import is_command
 from classes import User
 from create_bot import dp
 from aiogram import types

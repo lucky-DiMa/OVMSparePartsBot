@@ -2,10 +2,9 @@ from __future__ import annotations
 from copy import copy
 from typing import List
 from aiogram import types
-from icecream import ic
 
-import requests_to_bd
-from setup_morphy import morph
+from bot import requests_to_bd
+from utils.setup_morphy import morph
 from classes.spare_part import SparePart
 from classes.brand import Brand
 from classes.redis_object import RedisObject

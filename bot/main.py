@@ -5,15 +5,15 @@ from random import randint
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from icecream import ic
-
+from api import app as api_app
 from config import BY_WEBHOOK, BASE_WEBHOOK_URL
 from create_bot import dp, bot
-from redis_connector import connect_redis, close_redis
+from utils import connect_redis, close_redis
 from register_handlers import register_handlers
 
 WEB_SERVER_HOST = "127.0.0.1"
-WEB_SERVER_PORT = 5000
-WEBHOOK_PATH = "/webhook"
+WEB_SERVER_PORT = 5004
+WEBHOOK_PATH = "/webhook2"
 WEBHOOK_SECRET = str(randint(1, 1000000))
 
 
@@ -26,8 +26,8 @@ async def on_shutdown() -> None:
 
 
 def start_bot_webhook() -> None:
-    dp.startup.register(on_startup_webhook)
-    dp.shutdown.register(on_startup_webhook)
+    # dp.startup.register(on_startup_webhook)
+    # dp.shutdown.register(on_shutdown)
     app = web.Application()
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
@@ -36,6 +36,7 @@ def start_bot_webhook() -> None:
     )
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
+    app.add_subapp('/webhook2/api', api_app)
     web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
 
 async def on_startup_polling():

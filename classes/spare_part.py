@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from aiogram.types import FSInputFile, InputMediaPhoto
 
-from create_bot import bot
-import requests_to_bd
+from bot.create_bot import bot
+from bot import requests_to_bd
 from classes.user import User
 from classes.json_serializable_object import JsonSerializableObject
 from classes.photo import Photo

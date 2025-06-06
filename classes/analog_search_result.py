@@ -3,8 +3,8 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from classes import JsonSerializableObject, RedisObject, SparePart
-from requests_to_bd import get_analogs_by_code
-from setup_morphy import morph
+from bot.requests_to_bd import get_analogs_by_code
+from utils import morph
 
 
 class Analog(JsonSerializableObject):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from base64 import b64decode
-import requests_to_bd
+from bot import requests_to_bd
 from classes.json_serializable_object import JsonSerializableObject
 
 

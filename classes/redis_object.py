@@ -2,7 +2,7 @@ from typing import ClassVar
 
 from json import loads, dumps
 from classes.json_serializable_object import JsonSerializableObject
-from redis_connector import redis_client
+from utils import redis_client
 
 class RedisObject(JsonSerializableObject):
     redis_collection_name: ClassVar[str]

@@ -1,4 +1,3 @@
-import base64
 from json import loads
 from pprint import pprint
 

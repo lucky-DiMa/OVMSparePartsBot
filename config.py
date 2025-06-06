@@ -13,12 +13,4 @@ MONGO_CLUSTER_NAME = shared_config_dict[("TEST_" if TEST else "") + "MONGO_CLUST
 REDIS_URL = shared_config_dict["REDIS_URL"]
 MANUAL_URL = shared_config_dict["MANUAL_URL"]
 
-
-def is_command(message: Message):
-    for entity in message.entities:
-        if entity.type == 'bot_command':
-            return entity.get_text(message.text)[1:]
-    return None
-
-
 text_of_contacts_message = 'Режим работы: Пн-пт: 08:00 - 17:00, сб-вс: выходной\nНаши контакты:\nОрлов Антон Викторович: +79827611859\nEmail: oav@ovm.group'
