@@ -1,0 +1,12 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6379:6379"
+

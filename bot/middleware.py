@@ -1,10 +1,9 @@
 from aiogram.dispatcher.flags import get_flag
 
 from classes import User
-from create_bot import dp
-from aiogram import types
+from aiogram import types, Dispatcher
 
-from filters import StateFilter
+from bot.filters import StateFilter
 
 
 async def get_user_update_outer_middleware(handler: callable,
@@ -31,7 +30,7 @@ async def state_checker_callback_query_middleware(handler: callable, event: type
     return await handler(event, data)
 
 
-def register_middleware():
+def register_middleware(dp: Dispatcher):
     dp.update.outer_middleware.register(get_user_update_outer_middleware)
     dp.callback_query.middleware.register(state_checker_callback_query_middleware)
     dp.callback_query.middleware.register(state_message_checker_callback_query_middleware)

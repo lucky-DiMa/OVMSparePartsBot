@@ -1,6 +1,6 @@
 from __future__ import annotations
 from classes.redis_object import RedisObject
-from bot.requests_to_bd import get_brands
+from utils import RequestsTo1cService
 
 class Brand(RedisObject):
     redis_collection_name = 'Brands'
@@ -16,7 +16,7 @@ class Brand(RedisObject):
         redis_result = await cls.get_from_redis(uid)
         if redis_result:
             return redis_result
-        for brands_dict in get_brands()["brands"]:
+        for brands_dict in (await RequestsTo1cService.get_brands())["brands"]:
             if brands_dict["uid"] == uid:
                 self = cls.from_json(brands_dict)
                 await self.save_to_redis()
@@ -24,9 +24,9 @@ class Brand(RedisObject):
         return None
 
     @classmethod
-    def get_all_brands_dict(cls) -> dict[str, Brand]:
+    async def get_all_brands_dict(cls) -> dict[str, Brand]:
         result: dict[str, Brand] = {}
-        for brands_dict in get_brands()["brands"]:
+        for brands_dict in (await RequestsTo1cService.get_brands())["brands"]:
             result[brands_dict["uid"]] = Brand.from_json(brands_dict)
         return result
 

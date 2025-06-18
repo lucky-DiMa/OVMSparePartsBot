@@ -13,6 +13,8 @@ class JsonSerializableObject:
     def obj_to_json(obj: Any) -> dict[str, Any] | list[Any]:
         if type(obj) == list:
             return JsonSerializableObject.list_to_json(obj)
+        if type(obj) == dict:
+            return JsonSerializableObject.dict_to_json(obj)
         if hasattr(obj, 'to_json'):
             return obj.to_json()
         return obj
@@ -22,6 +24,13 @@ class JsonSerializableObject:
         res = []
         for obj in list_:
             res.append(JsonSerializableObject.obj_to_json(obj))
+        return res
+
+    @staticmethod
+    def dict_to_json(dict_: dict) -> dict:
+        res = {}
+        for key, obj in dict_.items():
+            res[key] = JsonSerializableObject.obj_to_json(obj)
         return res
 
     def to_json(self) -> dict[str, Any]:
@@ -36,9 +45,19 @@ class JsonSerializableObject:
         return res
 
     @staticmethod
+    def dict_from_json[dict_T: dict](dict_type: type[dict_T], json_dict: dict[Any, Any]) -> dict_T:
+        t = dict_type.__args__[1]
+        res: dict_type = {}
+        for key, obj in json_dict.items():
+            res[key] = JsonSerializableObject.obj_from_json(t, obj)
+        return res
+
+    @staticmethod
     def obj_from_json[T](cls: type[T], json_obj: dict[str, Any] | list[Any] | T) -> T:
         if hasattr(cls, '__origin__') and cls.__origin__ == list:
             return JsonSerializableObject.list_from_json(cls, json_obj)
+        if hasattr(cls, '__origin__') and cls.__origin__ == dict:
+            return JsonSerializableObject.dict_from_json(cls, json_obj)
         if hasattr(cls, 'from_json'):
             return cls.from_json(json_obj)
         return json_obj

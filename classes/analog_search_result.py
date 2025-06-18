@@ -3,8 +3,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from classes import JsonSerializableObject, RedisObject, SparePart
-from bot.requests_to_bd import get_analogs_by_code
-from utils import morph
+from utils import RequestsTo1cService, morph
 
 
 class Analog(JsonSerializableObject):
@@ -32,7 +31,7 @@ class AnalogSearchResult(RedisObject):
         redis_res = await cls.get_from_redis(code)
         if redis_res:
             return redis_res
-        json_res = get_analogs_by_code(code)
+        json_res = await RequestsTo1cService.get_analogs_by_code(code)
         if not json_res.get('thisisitem', False):
             return None
         json_res = json_res.get('item')

@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram.types import FSInputFile, InputMediaPhoto
 
 from bot.create_bot import bot
-from bot import requests_to_bd
+from utils import RequestsTo1cService
 from classes.user import User
 from classes.json_serializable_object import JsonSerializableObject
 from classes.photo import Photo
@@ -32,6 +32,10 @@ class SparePart(RedisObject):
     fields = {'brand': Brand, 'name': str, 'code': str, 'counts': list[Count],
               'photos': list[Photo]}
 
+    @property
+    def count(self) -> int:
+        return sum(map(lambda count_: count_.count, self.counts))
+
     def __init__(self, brand: Brand, name: str, code: str, counts: list[Count],
                  photos: list[Photo]):
         self.counts = counts
@@ -45,7 +49,7 @@ class SparePart(RedisObject):
         redis_result = await cls.get_from_redis(code)
         if redis_result:
             return redis_result
-        result_dict = requests_to_bd.get_part_by_code(code)
+        result_dict = await RequestsTo1cService.get_part_by_code(code)
         if result_dict['result'] in ['Товар или ячейка не найдены', 'Товар не найден']:
             return None
         result_dict = result_dict["item"]
@@ -62,7 +66,7 @@ class SparePart(RedisObject):
 
     @property
     def stripped(self):
-        return SparePartStripped(self.brand, self.name, self.code)
+        return SparePartStripped(self.brand, self.name, self.code, self.count)
 
     async def info_text(self) -> str:
         text = f'Артикул: <code>{self.code}</code>\nНаименование: <code>{self.name}</code>\nБренд: <code>{self.brand.name}</code>\n\n'
@@ -77,7 +81,7 @@ class SparePart(RedisObject):
 
     async def export_images_to_telegram_media(self) -> list[InputMediaPhoto] | FSInputFile | None:
         if len(self.photos) == 1:
-            return FSInputFile(self.photos[0].download())
+            return FSInputFile(await self.photos[0].download())
         elif len(self.photos) == 0:
             return None
         else:
@@ -85,10 +89,10 @@ class SparePart(RedisObject):
             for i, photo in enumerate(self.photos):
                 if i == 0:
                     media_list.append(
-                        InputMediaPhoto(media=FSInputFile(photo.download()), caption=await self.info_text(),
+                        InputMediaPhoto(media=FSInputFile(await photo.download()), caption=await self.info_text(),
                                               parse_mode='HTML'))
                     continue
-                media_list.append(InputMediaPhoto(media=FSInputFile(photo.download())))
+                media_list.append(InputMediaPhoto(media=FSInputFile(await photo.download())))
             return media_list
 
     def remove_all_photos(self):
@@ -110,16 +114,28 @@ class SparePart(RedisObject):
             self.remove_all_photos()
 
     async def build_search_analogs_link(self) -> str:
-        return f'https://t.me/{(await bot.me()).username}?start=search-analogs--{self.code.replace(" ", "---space---")}'
+        return f'https://t.me/{(await bot.me()).username}?start=search-analogs--{self.code.replace(" ", "---space---").replace('.', '---dot---')}'
 
+    def __lt__(self, other):
+        return self.count < other.count
+
+    def __le__(self, other):
+        return self.count <= other.count
+
+    def __gt__(self, other):
+        return self.count > other.count
+
+    def __ge__(self, other):
+        return self.count >= other.count
 
 class SparePartStripped(JsonSerializableObject):
-    fields = {'brand': Brand, 'name': str, 'code': str}
+    fields = {'brand': Brand, 'name': str, 'code': str, 'count': int}
 
-    def __init__(self, brand: Brand, name: str, code: str,):
+    def __init__(self, brand: Brand, name: str, code: str, count: int):
         self.brand = brand
         self.name = name
         self.code = code
+        self.count = count
 
     async def get_full_info(self) -> SparePart:
         return await SparePart.get_by_code(self.code)
@@ -127,6 +143,17 @@ class SparePartStripped(JsonSerializableObject):
     def __repr__(self):
         return f'{self.name=} {self.code=} {self.brand=} '
 
+    def __lt__(self, other):
+        return self.count < other.count
+
+    def __le__(self, other):
+        return self.count <= other.count
+
+    def __gt__(self, other):
+        return self.count > other.count
+
+    def __ge__(self, other):
+        return self.count >= other.count
 
 if __name__ == '__main__':
     pass

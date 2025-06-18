@@ -14,3 +14,6 @@ async def message_get(request: web.Request):
     return web.json_response({'status': 200})
 
 app.add_routes(router)
+
+def main():
+    ...

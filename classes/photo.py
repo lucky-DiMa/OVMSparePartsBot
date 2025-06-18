@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from base64 import b64decode
-from bot import requests_to_bd
+from utils import RequestsTo1cService
 from classes.json_serializable_object import JsonSerializableObject
 
 
@@ -10,8 +10,8 @@ class Photo(JsonSerializableObject):
     def __init__(self, photo_id: str):
         self.id = photo_id
 
-    def download(self):
-        data = requests_to_bd.get_image_by_id(self.id)["data"]
+    async def download(self):
+        data = (await RequestsTo1cService.get_image_by_id(self.id))["data"]
         with open(f'{self.id}.jpg', 'wb') as file:
             file.write(b64decode(data))
         return f'{self.id}.jpg'

@@ -1,9 +1,5 @@
 from __future__ import annotations
-
-from dataclasses import fields
-from datetime import datetime, timedelta, UTC
-from warnings import deprecated
-from aiogram import types
+from datetime import datetime, UTC
 from classes.mongo_db_object import MongoDBObject
 from classes.search_result import SearchResult
 

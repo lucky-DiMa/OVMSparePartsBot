@@ -1,12 +1,13 @@
 from aiogram.enums import ChatAction
-from aiogram import types, F
+from aiogram import types, F, Router
+
 from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult, AnalogSearchResult
 from classes.multiquery import MultiQuery
 from config import text_of_contacts_message
-from create_bot import dp, bot
-from filters import StateFilter
-from keyboards import query_keyboard
-from query_utils import get_query_text
+from bot.create_bot import bot
+from bot.filters import StateFilter
+from bot.keyboards import query_keyboard
+from bot.query_utils import get_query_text
 
 
 # async def callback_for_search_something_btn(query: types.CallbackQuery, user: User):
@@ -22,15 +23,14 @@ async def callback_for_goto_sp_page_buttons(query: types.CallbackQuery):
     query_text = get_query_text(query.message)
     result = await SearchResult.get(query_text)
     new_page_n = int(query.data.split()[-2])
-    if new_page_n == 0:
+    brand_n = int(query.data.split()[-1])
+    if new_page_n < 0:
         await query.answer('Вы находитесь на первой странице!', True)
         return
-    if new_page_n - result.pages_count_of_brand(query.data.split('"')[-2]) == 1:
+    if new_page_n >= result.pages_count_of_brand(brand_n):
         await query.answer('Вы находитесь на последней странице странице!', True)
         return
-    if new_page_n > result.pages_count_of_brand(query.data.split('"')[-2]):
-        new_page_n = result.pages_count_of_brand(query.data.split('"')[-2])
-    await query.message.edit_reply_markup(reply_markup=result.sp_pages_of_brand_keyboard(query.data.split('"')[-2], new_page_n))
+    await query.message.edit_reply_markup(reply_markup=result.sp_pages_of_brand_keyboard(brand_n, new_page_n))
 
 
 # async def callback_for_back_to_results_btn(query: types.CallbackQuery):
@@ -55,9 +55,10 @@ async def callback_for_show_spare_part_buttons(query: types.CallbackQuery, user:
     await query.answer()
     await bot.send_chat_action(query.from_user.id, ChatAction.TYPING)
     n = int(query.data.split()[-1])
+    brand_n = int(query.data.split()[-2])
     query_text = get_query_text(query.message)
     result = await SearchResult.get(query_text)
-    sp = await result.spare_parts[n].get_full_info()
+    sp = await result.spare_parts[result.brands_uids_list[brand_n]][n].get_full_info()
     await sp.send_info_to_user(user)
 
 
@@ -84,13 +85,13 @@ async def callback_for_contacts_btn(query: types.CallbackQuery):
 
 
 async def callback_for_choose_brand_buttons(query: types.CallbackQuery):
-    brand_uid = query.data.split('"')[-2]
+    brand_n = int(query.data.split(' ')[-1])
     query_text = get_query_text(query.message)
     result = await SearchResult.get(query_text)
     await query.message.edit_text(
-        f'Запрос: <code>{query_text}</code>\n\n' + result.get_result_stats_text_for_brand(brand_uid),
+        f'Запрос: <code>{query_text}</code>\n\n' + result.get_result_stats_text_for_brand(brand_n),
         parse_mode='HTML',
-        reply_markup=result.sp_pages_of_brand_keyboard(brand_uid, 1))
+        reply_markup=result.sp_pages_of_brand_keyboard(brand_n, 0))
 
 
 async def callback_for_start_button(query: types.CallbackQuery, user: User):
@@ -98,17 +99,17 @@ async def callback_for_start_button(query: types.CallbackQuery, user: User):
         await query.answer(user.end_type_text, True)
         return
     await query.answer()
-    from text_scripts import search
+    from bot.handlers.text_scripts import search
     await search(query.message, user)
 
 
 async def callback_for_need_new_brand_btn(query: types.CallbackQuery):
-    await query.answer('Напишите об этом в обратой связи и укажите какой бренд вам нужен!', show_alert=True)
+    await query.answer('Напишите об этом в обратной связи и укажите какой бренд вам нужен!', show_alert=True)
 
 
 async def callback_for_cancel_typing_feedback_btn(query: types.CallbackQuery, user: User):
     user.state = 'NONE'
-    await query.answer(f'Написание сообщения обратной сваязи отменено!', show_alert=True)
+    await query.answer(f'Написание сообщения обратной связи отменено!', show_alert=True)
     await query.message.delete()
 
 
@@ -127,14 +128,12 @@ async def callback_for_goto_brands_page_buttons(query: types.CallbackQuery):
     new_page_n = int(query.data.split()[-1])
     query_text = get_query_text(query.message)
     result = await SearchResult.get(query_text)
-    if new_page_n == 0:
+    if new_page_n < 0:
         await query.answer('Вы находитесь на первой странице!', True)
         return
-    if new_page_n - result.brands_pages_count == 1:
+    if new_page_n >= result.brands_pages_count:
         await query.answer('Вы находитесь на последней странице странице!', True)
         return
-    if new_page_n > result.brands_pages_count:
-        new_page_n = result.brands_pages_count
     await query.message.edit_reply_markup(reply_markup=result.brands_pages_keyboard(new_page_n))
 
 
@@ -207,57 +206,56 @@ async def callback_for_export_mq_to_excel_button(query: types.CallbackQuery, use
     await query.message.answer_document(types.FSInputFile('result.xlsx',
                                                           f'Мультизапрос #{mq._id}.xlsx'))
 
-
-def reg_handlers():
-    dp.callback_query.register(problem_with_username, lambda query: query.from_user.username is None)
-    dp.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
-    dp.callback_query.register(send_contact, lambda _, user: user.state == 'SENDING CONTACT')
-    dp.callback_query.register(callback_for_help_typing_query_btn, F.data == 'HELP TYPING QUERY', flags={
-            'state_filter': StateFilter("TYPING QUERY", True),
-            "check_state_message": True,
-            "state_error_message": 'Вы сейчас не отправляете запрос!'
-        })
-    dp.callback_query.register(callback_for_cancel_typing_query_btn, F.data == 'CANCEL TYPING QUERY', flags={
-            'state_filter': StateFilter("TYPING QUERY", True),
-            "check_state_message": True,
-            "state_error_message": 'Вы сейчас не отправляете запрос!'
-        })
-    dp.callback_query.register(callback_for_set_query_type_button,
-                               lambda query: query.data.startswith('SET_QUERY_TYPE '), flags={
-            'state_filter': StateFilter("TYPING QUERY", True),
-            "check_state_message": True,
-            "state_error_message": 'Вы сейчас не отправляете запрос!'
-        })
-    # dp.callback_query.register(callback_for_search_something_btn,
-    #                            lambda query: query.data.startswith('SEARCH "'), flags={
-    #         'state_filter': StateFilter("TYPING QUERY"),
-    #         "check_state_message": True,
-    #         'state_error_message': 'Вы сейчас не отправляете запрос!'
-    #     })
-    dp.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK', flags={
-        'state_filter': StateFilter("TYPING FEEDBACK"),
+callback_queries_router = Router(name='callback_queries')
+callback_queries_router.callback_query.register(problem_with_username, lambda query: query.from_user.username is None)
+callback_queries_router.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
+callback_queries_router.callback_query.register(send_contact, lambda _, user: user.state == 'SENDING CONTACT')
+callback_queries_router.callback_query.register(callback_for_help_typing_query_btn, F.data == 'HELP TYPING QUERY', flags={
+        'state_filter': StateFilter("TYPING QUERY", True),
         "check_state_message": True,
-        "state_error_message": 'Вы сейчас не отправляете сообщение обратной связи!'
+        "state_error_message": 'Вы сейчас не отправляете запрос!'
     })
-    # dp.callback_query.register(callback_for_reload_results_button, F.data == 'RELOAD RESULTS')
-    dp.callback_query.register(callback_for_start_button,
-                               lambda query: query.data.startswith('SEARCH'))
-    dp.callback_query.register(callback_for_goto_sp_page_buttons,
-                               lambda query: query.data.startswith('GOTO SP PAGE '))
-    dp.callback_query.register(callback_for_goto_asp_page_buttons,
-                               lambda query: query.data.startswith('GOTO ASP PAGE '))
-    dp.callback_query.register(callback_for_goto_brands_page_buttons,
-                               lambda query: query.data.startswith('GOTO BRANDS PAGE '))
-    dp.callback_query.register(callback_for_page_number_button, lambda query: query.data.startswith('PAGE NUMBER'))
-    dp.callback_query.register(callback_for_contacts_btn, F.data == 'CONTACTS')
-    dp.callback_query.register(callback_for_need_new_brand_btn, F.data == 'NEED NEW BRAND')
-    dp.callback_query.register(callback_for_choose_brand_buttons,
-                               lambda query: query.data.startswith('CHOOSE BRAND "'))
-    dp.callback_query.register(callback_for_show_spare_part_buttons,
-                               lambda query: query.data.startswith('SHOW SP '))
-    dp.callback_query.register(callback_for_show_analog_sp_buttons,
-                               lambda query: query.data.startswith('SHOW ASP '))
-    dp.callback_query.register(callback_for_back_to_brands_button,
-                               lambda query: query.data.startswith('BACK TO BRANDS '))
-    dp.callback_query.register(callback_for_export_mq_to_excel_button,
-                               lambda query: query.data.startswith('EXPORT MQ XLSX '))
+callback_queries_router.callback_query.register(callback_for_cancel_typing_query_btn, F.data == 'CANCEL TYPING QUERY', flags={
+        'state_filter': StateFilter("TYPING QUERY", True),
+        "check_state_message": True,
+        "state_error_message": 'Вы сейчас не отправляете запрос!'
+    })
+callback_queries_router.callback_query.register(callback_for_set_query_type_button,
+                           lambda query: query.data.startswith('SET_QUERY_TYPE '), flags={
+        'state_filter': StateFilter("TYPING QUERY", True),
+        "check_state_message": True,
+        "state_error_message": 'Вы сейчас не отправляете запрос!'
+    })
+# callback_queries_router.callback_query.register(callback_for_search_something_btn,
+#                            lambda query: query.data.startswith('SEARCH "'), flags={
+#         'state_filter': StateFilter("TYPING QUERY"),
+#         "check_state_message": True,
+#         'state_error_message': 'Вы сейчас не отправляете запрос!'
+#     })
+callback_queries_router.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK', flags={
+    'state_filter': StateFilter("TYPING FEEDBACK"),
+    "check_state_message": True,
+    "state_error_message": 'Вы сейчас не отправляете сообщение обратной связи!'
+})
+# callback_queries_router.callback_query.register(callback_for_reload_results_button, F.data == 'RELOAD RESULTS')
+callback_queries_router.callback_query.register(callback_for_start_button,
+                           lambda query: query.data.startswith('SEARCH'))
+callback_queries_router.callback_query.register(callback_for_goto_sp_page_buttons,
+                           lambda query: query.data.startswith('GOTO SP PAGE '))
+callback_queries_router.callback_query.register(callback_for_goto_asp_page_buttons,
+                           lambda query: query.data.startswith('GOTO ASP PAGE '))
+callback_queries_router.callback_query.register(callback_for_goto_brands_page_buttons,
+                           lambda query: query.data.startswith('GOTO BRANDS PAGE '))
+callback_queries_router.callback_query.register(callback_for_page_number_button, lambda query: query.data.startswith('PAGE NUMBER'))
+callback_queries_router.callback_query.register(callback_for_contacts_btn, F.data == 'CONTACTS')
+callback_queries_router.callback_query.register(callback_for_need_new_brand_btn, F.data == 'NEED NEW BRAND')
+callback_queries_router.callback_query.register(callback_for_choose_brand_buttons,
+                           lambda query: query.data.startswith('CHOOSE BRAND '))
+callback_queries_router.callback_query.register(callback_for_show_spare_part_buttons,
+                           lambda query: query.data.startswith('SHOW SP '))
+callback_queries_router.callback_query.register(callback_for_show_analog_sp_buttons,
+                           lambda query: query.data.startswith('SHOW ASP '))
+callback_queries_router.callback_query.register(callback_for_back_to_brands_button,
+                           lambda query: query.data.startswith('BACK TO BRANDS '))
+callback_queries_router.callback_query.register(callback_for_export_mq_to_excel_button,
+                           lambda query: query.data.startswith('EXPORT MQ XLSX '))

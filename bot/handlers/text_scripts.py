@@ -2,13 +2,12 @@ from asyncio import sleep
 from aiogram.enums import ContentType
 from aiogram.filters import Command, CommandObject
 from classes import User, SingleQuery, AnalogSearchResult
-from aiogram import types, F
-from filters import is_command
+from aiogram import types, F, Router
+from bot.filters import is_command, StateFilter
 from classes import MultiQuery
 from config import text_of_contacts_message
-from create_bot import dp, bot
-from filters import StateFilter
-from keyboards import query_keyboard
+from bot.create_bot import bot
+from bot.keyboards import query_keyboard
 
 
 async def cannot_use_command(message: types.Message):
@@ -27,7 +26,7 @@ async def start(message: types.Message, user_exists: bool, user: User, command: 
     if not user_exists:
         user = User.reg(message.from_user.id)
     if user.phone != "" and command and command.args.startswith('search-analogs--'):
-        res = await AnalogSearchResult.get_by_code(command.args.replace('search-analogs--', '').replace('---space---', ' '))
+        res = await AnalogSearchResult.get_by_code(command.args.replace('search-analogs--', '').replace('---space---', ' ').replace('---dot---', '.'))
         await message.answer(res.text, parse_mode='HTML', reply_markup=res.keyboard())
         return
     markup = types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]],
@@ -77,7 +76,7 @@ async def query_message(message: types.Message, user: User):
             result = await query.get_result()
             text = f'Запрос: <code>{message.text}</code>\n\n' + result.get_result_stats_text()
             await bot.edit_message_text(text, parse_mode='HTML', chat_id=user.id, message_id=user.id_of_message_promoter_to_type,
-                                        reply_markup=result.brands_pages_keyboard(1))
+                                        reply_markup=result.brands_pages_keyboard(0))
         case 'multi':
             general_text = 'Статистика мультизапроса:'
             texts = message.text.split('\n')
@@ -91,7 +90,7 @@ async def query_message(message: types.Message, user: User):
             await bot.delete_message(user.id, user.id_of_message_promoter_to_type)
             for query_text, query_result in results.items():
                 message_text = f'Запрос: <code>{query_text}</code>\n\n' + query_result.get_result_stats_text()
-                markup = query_result.brands_pages_keyboard(1)
+                markup = query_result.brands_pages_keyboard(0)
                 await message.answer(message_text, parse_mode='HTML', reply_markup=markup)
             for i, text in enumerate(texts, 1):
                 general_text += f'\n{i}. <code>{text}</code> - '
@@ -211,7 +210,7 @@ async def restart_command(message: types.Message):
     await message.delete()
     await message.answer('RESTARTING...')
     import os
-    os.system("bash main.sh")
+    os.system("docker compose restart")
 
 
 async def delete_me(message: types.Message):
@@ -256,30 +255,30 @@ async def cancel_command(message: types.Message, user: User):
     await message.delete()
     
 
-def reg_handlers():
-    dp.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
-    dp.message.register(problem_with_username, lambda message: message.from_user.username is None)
-    dp.message.register(start, lambda _, user_exists: not user_exists,
-                        F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
-    dp.message.register(cancel_command, Command('cancel'), F.content_type == ContentType.TEXT)
-    dp.message.register(contact, StateFilter('SENDING CONTACT'),
-                        F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
-    dp.message.register(query_message, StateFilter('TYPING QUERY', True),
-                        F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
-    dp.message.register(feedback_msg, StateFilter('TYPING FEEDBACK'),
-                        F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
-    dp.message.register(start, Command('start'), F.content_type == ContentType.TEXT)
-    dp.message.register(help_command, Command('help'), F.content_type == ContentType.TEXT)
-    dp.message.register(feedback, Command('feedback'), F.content_type == ContentType.TEXT)
-    dp.message.register(search, Command('search'), F.content_type == ContentType.TEXT)
-    dp.message.register(delete_me, lambda message: message.from_user.id == 1358414277, Command('delete_me'),
-                        F.content_type == ContentType.TEXT)
-    dp.message.register(get_a_q_command, lambda message: message.from_user.id == 1358414277, Command('get_a_q'),
-                        F.content_type == ContentType.TEXT)
-    dp.message.register(delete_all, lambda message: message.from_user.id == 1358414277, Command('delete_all'),
-                        F.content_type == ContentType.TEXT)
-    dp.message.register(restart_command, lambda message: message.from_user.id in [1358414277],
-                        Command('restart'), F.content_type == ContentType.TEXT)
-    dp.message.register(contacts, Command('contacts'), F.content_type == ContentType.TEXT)
-    dp.message.register(get_analogs_command, Command('get_analogs'), F.content_type == ContentType.TEXT)
-    dp.message.register(all_messages)
+text_messages_router = Router(name='text_messages')
+text_messages_router.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
+text_messages_router.message.register(problem_with_username, lambda message: message.from_user.username is None)
+text_messages_router.message.register(start, lambda _, user_exists: not user_exists,
+                    F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
+text_messages_router.message.register(cancel_command, Command('cancel'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(contact, StateFilter('SENDING CONTACT'),
+                    F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
+text_messages_router.message.register(query_message, StateFilter('TYPING QUERY', True),
+                    F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
+text_messages_router.message.register(feedback_msg, StateFilter('TYPING FEEDBACK'),
+                    F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
+text_messages_router.message.register(start, Command('start'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(help_command, Command('help'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(feedback, Command('feedback'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(search, Command('search'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(delete_me, lambda message: message.from_user.id == 1358414277, Command('delete_me'),
+                    F.content_type == ContentType.TEXT)
+text_messages_router.message.register(get_a_q_command, lambda message: message.from_user.id == 1358414277, Command('get_a_q'),
+                    F.content_type == ContentType.TEXT)
+text_messages_router.message.register(delete_all, lambda message: message.from_user.id == 1358414277, Command('delete_all'),
+                    F.content_type == ContentType.TEXT)
+text_messages_router.message.register(restart_command, lambda message: message.from_user.id in [1358414277],
+                    Command('restart'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(contacts, Command('contacts'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(get_analogs_command, Command('get_analogs'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(all_messages)
