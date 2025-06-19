@@ -12,7 +12,7 @@ from bot.create_bot import dp, bot
 from utils import connect_redis, close_redis
 from bot.handlers import router
 
-WEB_SERVER_HOST = "127.0.0.1"
+WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = 5004
 WEBHOOK_PATH = "/webhook2"
 WEBHOOK_SECRET = str(randint(1, 1000000))
@@ -27,8 +27,8 @@ async def on_shutdown() -> None:
 
 
 def start_bot_webhook() -> None:
-    # dp.startup.register(on_startup_webhook)
-    # dp.shutdown.register(on_shutdown)
+    dp.startup.register(on_startup_webhook)
+    dp.shutdown.register(on_shutdown)
     app = web.Application()
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
