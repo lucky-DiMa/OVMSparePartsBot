@@ -104,7 +104,7 @@ class MultiQuery(MongoDBObject):
             ws.column_dimensions['A'].width = 100
             ws.column_dimensions['B'].width = 100
             ws.column_dimensions['C'].width = 100
-            for brand in result.brands:
+            for brand in result.brands_list:
                 ws['A' + str(i)].value = brand.name
                 ws['A' + str(i)].border = all_border
                 ws['A' + str(i)].font = bold_font
@@ -117,7 +117,7 @@ class MultiQuery(MongoDBObject):
                     ws[letter + str(i)].border = all_border
                     ws[letter + str(i)].font = bold_font
                 i += 1
-                for sp_stripped in result.filter_brand(brand.uid):
+                for sp_stripped in result.spare_parts[brand.uid]:
                     sp = await sp_stripped.get_full_info()
                     ws['A' + str(i)].value = sp.code
                     ws['A' + str(i)].border = l_r_border

@@ -13,5 +13,5 @@ class StateFilter:
 def is_command(message: Message):
     for entity in message.entities:
         if entity.type == 'bot_command':
-            return entity.get_text(message.text)[1:]
+            return entity.extract_from(message.text)[1:]
     return None
