@@ -12,4 +12,6 @@ COPY . .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+EXPOSE 5004
+
 CMD ["python", "main.py"]

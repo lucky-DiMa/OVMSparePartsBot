@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    ports:
+      - "5004:5004"
     restart: always
   redis:
     image: redis:latest
