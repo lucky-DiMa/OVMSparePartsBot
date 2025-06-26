@@ -4,6 +4,7 @@ from classes import User
 from aiogram import types, Dispatcher
 
 from bot.filters import StateFilter
+from utils import is_command
 
 
 async def get_user_update_outer_middleware(handler: callable,
@@ -27,6 +28,32 @@ async def state_checker_callback_query_middleware(handler: callable, event: type
         if state_filter.checking_state == 'NONE':
             return await event.answer(data['user'].end_type_text, True)
         return await event.answer(get_flag(data, 'state_error_message'), True)
+    return await handler(event, data)
+
+
+async def permission_checker_callback_query_middleware(handler: callable, event: types.Update, data: dict):
+    if not data["user_exists"] or data["user"].is_owner:
+        return await handler(event, data)
+    permissions = get_flag(data, 'required_permissions', default=[])
+    for permission in permissions:
+        if data["user"].is_owner:
+            return await handler(event, data)
+        if not data["user"].is_allowed(permission):
+            return await event.answer("У вас недостаточно прав для использования этой функции", True)
+    return await handler(event, data)
+
+
+async def permission_checker_message_middleware(handler: callable, event: types.Message, data: dict):
+    if not data["user_exists"] or data["user"].is_owner:
+        return await handler(event, data)
+    permissions = get_flag(data, 'required_permissions', default=[])
+    for permission in permissions:
+        if not data["user"].is_allowed(permission):
+            if is_command(event):
+                return await event.reply(
+                    "У вас недостаточно прав для использования этой команды!")
+            return await event.reply(
+                "У вас недостаточно прав для завершения этого действия!")
     return await handler(event, data)
 
 

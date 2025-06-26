@@ -1,13 +1,15 @@
 from aiogram.enums import ChatAction
 from aiogram import types, F, Router
 
-from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult, AnalogSearchResult
+from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult, AnalogSearchResult, AccessRequest
+from classes.access_request import ResponseException
 from classes.multiquery import MultiQuery
 from config import text_of_contacts_message
 from bot.create_bot import bot
 from bot.filters import StateFilter
 from bot.keyboards import query_keyboard
 from bot.query_utils import get_query_text
+from utils import morph
 
 
 # async def callback_for_search_something_btn(query: types.CallbackQuery, user: User):
@@ -206,6 +208,81 @@ async def callback_for_export_mq_to_excel_button(query: types.CallbackQuery, use
     await query.message.answer_document(types.FSInputFile('result.xlsx',
                                                           f'Мультизапрос #{mq._id}.xlsx'))
 
+async def callback_for_accept_reg_button(query: types.CallbackQuery, user: User):
+    request = AccessRequest.get_by_id(int(query.data.split()[-1]))
+    request_message_id = User.get_by_id(request.user_id).id_of_message_promoter_to_type
+    try:
+        request.accept(user.id)
+    except ResponseException:
+        await query.answer(
+            "Запрос уже, принят, отклонён или отменён отправителем! Чтобы узнать подробнее, обновите информацию!", True)
+        return
+    reg_user = User.get_by_id(request.user_id)
+    await query.answer('Запрос принят успешно!', True)
+    await query.message.delete()
+    await query.message.answer(f'Вы приняли запрос доступа к боту от <code>{reg_user.phone}</code>', parse_mode="HTML")
+    await reg_user.send_message('Ваш запрос на регистрацию был принят!')
+    await reg_user.send_message(
+        f'Здравствуйте {query.from_user.full_name}!\nЯ бот компании ООО "ОМ партс", которая входит в группу компаний ТД "Овоще-молочный", помогу вам с лёгкостью найти любую запчасть, если она есть в нашей базе данных!\n\n{"" if user.phone != "" else "Пожалуйста, поделись со мной своим контактом Telegram с помощью кнопки ниже, чтобы я занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер, то, к сожалению, вы не сможете использовать этого бота!"}')
+    await bot.delete_message(reg_user.id, request_message_id)
+
+
+async def callback_for_reject_reg_button(query: types.CallbackQuery, user: User):
+    request = AccessRequest.get_by_id(int(query.data.split()[-1]))
+    reg_user = User.get_by_id(request.user_id)
+    try:
+        request.reject(user.id)
+    except ResponseException:
+        await query.answer(
+            "Запрос уже, принят, отклонён или отменён отправителем! Чтобы узнать подробнее, обновите информацию!", True)
+        return
+    await query.answer('Запрос отклонён успешно!', True)
+    await query.message.delete()
+    await reg_user.delete_state_message()
+    await query.message.answer(f'Вы отклонили запрос доступа к боту от {reg_user.phone}')
+    await reg_user.send_message('Ваш запрос на регистрацию был отклонён!')
+
+
+async def callback_for_ban_reg_button(query: types.CallbackQuery, user: User):
+    request = AccessRequest.get_by_id(int(query.data.split()[-1]))
+    reg_user = User.get_by_id(request.user_id)
+    try:
+        request.reject_and_ban(user.id)
+    except ResponseException:
+        await query.answer("Запрос уже, принят, отклонён или отменён отправителем! Чтобы узнать подробнее, обновите информацию!", True)
+        return
+    await query.answer('Запрос отклонён успешно!', True)
+    await query.message.delete()
+    await query.message.answer(
+        f'Вы отклонили запрос доступа к боту от {reg_user.phone}\nВы успешно заблокировали исходящие запросы от {reg_user.phone}\nID: {reg_user.id}\nЧто бы разблокировать напишите команду /unban')
+    await reg_user.delete_state_message()
+    await reg_user.send_message(
+        f'Ваш запрос на регистрацию был отклонён! Вы были заблокированы для разблокировки передайте ваш ID руководству\nID: {reg_user.id}')
+
+
+async def callback_for_update_requests_button(query: types.CallbackQuery, user: User):
+    requests = AccessRequest.get_waiting()
+    try:
+        await query.message.edit_text(f'<b>{len(requests)}</b> {morph.parse("запрос")[0].make_agree_with_number(len(requests)).word}, ожидающих ответа',
+                             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text=request.user_phone, callback_data=f'VIEW REQUEST {request.id}')] for request in requests] + [[types.InlineKeyboardButton(text="↻ Обновить", callback_data="UPDATE REQUESTS")]]),
+                             parse_mode='HTML')
+    except:
+        await query.answer("Данные обновлены")
+    else:
+        await query.answer()
+
+
+async def callback_for_view_request_buttons(query: types.CallbackQuery):
+    request = AccessRequest.get_by_id(int(query.data.split()[-1]))
+    try:
+        await query.message.edit_text(await request.get_info(False), reply_markup=request.responding_keyboard(),
+                                      parse_mode='HTML')
+    except:
+        await query.answer("Данные обновлены")
+    else:
+        await query.answer()
+
+
 callback_queries_router = Router(name='callback_queries')
 callback_queries_router.callback_query.register(problem_with_username, lambda query: query.from_user.username is None)
 callback_queries_router.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
@@ -259,3 +336,18 @@ callback_queries_router.callback_query.register(callback_for_back_to_brands_butt
                            lambda query: query.data.startswith('BACK TO BRANDS '))
 callback_queries_router.callback_query.register(callback_for_export_mq_to_excel_button,
                            lambda query: query.data.startswith('EXPORT MQ XLSX '))
+callback_queries_router.callback_query.register(callback_for_accept_reg_button,
+                               lambda query: query.data.startswith('ACCEPT REG '),
+                               flags={"required_permissions": ["responder"]})
+callback_queries_router.callback_query.register(callback_for_reject_reg_button,
+                               lambda query: query.data.startswith('REJECT REG '),
+                               flags={"required_permissions": ["responder"]})
+callback_queries_router.callback_query.register(callback_for_ban_reg_button,
+                                   lambda query: query.data.startswith('REJECT AND BAN REG '),
+                                   flags={"required_permissions": ["responder"]})
+callback_queries_router.callback_query.register(callback_for_update_requests_button,
+                               F.data == 'UPDATE REQUESTS',
+                               flags={"required_permissions": ["responder"]})
+callback_queries_router.callback_query.register(callback_for_view_request_buttons,
+                               lambda query: query.data.startswith('VIEW REQUEST '),
+                               flags={"required_permissions": ["responder"]})

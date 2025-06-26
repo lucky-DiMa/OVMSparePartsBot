@@ -56,7 +56,7 @@ class SparePart(RedisObject):
         sp = cls(await Brand.get_by_uid(result_dict["brandid"]),
                    result_dict["name"],
                    result_dict["code"],
-                   [Count(counts_dict["count"], counts_dict["namewh"]) for counts_dict in result_dict["counts"]],
+                   [Count(int(counts_dict["count"]), counts_dict["namewh"]) for counts_dict in result_dict["counts"]],
                    [Photo(uid) for uid in result_dict["imgs"]])
         await sp.save_to_redis()
         return sp

@@ -1,13 +1,14 @@
 from asyncio import sleep
 from aiogram.enums import ContentType
 from aiogram.filters import Command, CommandObject
-from classes import User, SingleQuery, AnalogSearchResult
+from classes import User, SingleQuery, AnalogSearchResult, AccessRequest
 from aiogram import types, F, Router
 from bot.filters import is_command, StateFilter
 from classes import MultiQuery
-from config import text_of_contacts_message
+from config import text_of_contacts_message, ACCESS_KEY
 from bot.create_bot import bot
 from bot.keyboards import query_keyboard
+from utils import morph
 
 
 async def cannot_use_command(message: types.Message):
@@ -130,12 +131,23 @@ async def contact(message: types.Message, user: User):
             keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]], resize_keyboard=True)
         await message.answer('Вы отправили чужой контакт!', reply_markup=markup)
         return
-    user.state = 'NONE'
     user.phone = message.contact.phone_number
+    user.state = 'WAITING FOR REG CONFIRMATION'
     if not user.phone.startswith('+'):
         user.phone = '+' + user.phone
-    await message.answer(f'Номер {user.phone} сохранён регистрация завершена!',
-                         reply_markup=types.ReplyKeyboardRemove())
+    request = AccessRequest.create(user)
+    msg = await message.answer(await request.get_info(True),
+                                     reply_markup=AccessRequest.editing_keyboard(), parse_mode='HTML')
+    user.id_of_message_promoter_to_type = msg.message_id
+    await message.delete()
+    for admin in User.get_responders():
+        await admin.send_message(
+            f"Поступил новый запрос доступа к боту от <code>{request.user_phone}</code>.\nВсего <code>{len(AccessRequest.get_waiting())}</code> запросов, ожидающих подтверждения.",
+            markup=types.InlineKeyboardMarkup(
+                inline_keyboard=[[types.InlineKeyboardButton(text=f'Посмотреть запрос от {request.user_phone}',
+                                                             callback_data=f'VIEW REQUEST {request.id}')],
+                                 [types.InlineKeyboardButton(text="Посмотреть все запросы",
+                                                             callback_data="UPDATE REQUESTS")]]))
 
 
 async def all_messages(message: types.Message):
@@ -253,14 +265,38 @@ async def cancel_command(message: types.Message, user: User):
         user.state = 'NONE'
         await user.send_message('Действие отменено!')
     await message.delete()
-    
+
+async def no_access(message: types.Message):
+    await message.delete()
+    await message.answer('У вас нет доступа к боту!')
+
+
+async def invite_command(message:types.Message):
+    await message.delete()
+    await message.answer(f'Чтобы пригласить нового пользователя скопируйте ссылку и отправьте ему.\n\n Ссылка: <code>https://t.me/{(await bot.get_me()).username}?start={ACCESS_KEY}</code>', parse_mode='HTML')
+
+
+async def requests_command(message:types.Message):
+    await message.delete()
+    requests = AccessRequest.get_waiting()
+
+    await message.answer(f'<b>{len(requests)}</b> {morph.parse("запрос")[0].make_agree_with_number(len(requests)).word}, ожидающих ответа',
+                         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text=request.user_phone, callback_data=f'VIEW REQUEST {request.id}')] for request in requests] + [[types.InlineKeyboardButton(text="↻ Обновить", callback_data="UPDATE REQUESTS")]]),
+                         parse_mode='HTML')
+
+
+async def waiting_for_reg_confirmation(message: types.Message):
+    await message.reply('Пожалуйста дождитесь подтверждения регистрации!')
+
 
 text_messages_router = Router(name='text_messages')
 text_messages_router.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
+text_messages_router.message.register(start, F.text == '/start ' +  ACCESS_KEY, F.content_type == ContentType.TEXT)
+text_messages_router.message.register(no_access, lambda _, user_exists: not user_exists)
 text_messages_router.message.register(problem_with_username, lambda message: message.from_user.username is None)
-text_messages_router.message.register(start, lambda _, user_exists: not user_exists,
-                    F.content_type.in_([ContentType.TEXT, ContentType.PHOTO, ContentType.CONTACT]))
 text_messages_router.message.register(cancel_command, Command('cancel'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(waiting_for_reg_confirmation,
+                        StateFilter('WAITING FOR REG CONFIRMATION'))
 text_messages_router.message.register(contact, StateFilter('SENDING CONTACT'),
                     F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
 text_messages_router.message.register(query_message, StateFilter('TYPING QUERY', True),
@@ -279,6 +315,12 @@ text_messages_router.message.register(delete_all, lambda message: message.from_u
                     F.content_type == ContentType.TEXT)
 text_messages_router.message.register(restart_command, lambda message: message.from_user.id in [1358414277],
                     Command('restart'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(invite_command,
+                        Command('invite'), F.content_type == ContentType.TEXT,
+                        flags={"required_permissions": ["invite_new_users"]})
+text_messages_router.message.register(requests_command,
+                            Command('requests'), F.content_type == ContentType.TEXT,
+                            flags={"required_permissions": ["responder"]})
 text_messages_router.message.register(contacts, Command('contacts'), F.content_type == ContentType.TEXT)
 text_messages_router.message.register(get_analogs_command, Command('get_analogs'), F.content_type == ContentType.TEXT)
 text_messages_router.message.register(all_messages)
