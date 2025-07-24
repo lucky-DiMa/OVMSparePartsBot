@@ -11,3 +11,4 @@ from .spare_part import SparePart
 from .user import User
 from .analog_search_result import AnalogSearchResult, Analog
 from .access_request import AccessRequest
+from .states import StateInfo, States, State

@@ -5,6 +5,7 @@ from typing import NamedTuple, AnyStr, Any
 from aiogram import types
 
 from bot.admin_permissions import permissions
+from classes.states import State, States
 from classes.mongo_db_object import MongoDBObject
 from config import MANUAL_URL
 from bot import bot
@@ -67,11 +68,11 @@ class User(MongoDBObject):
                  is_owner: bool = False,
                  is_admin: bool = False,
                  phone: str = '',
-                 state: str = 'NONE',
+                 state: str = State(States.JUST_STARTED),
                  id_of_message_promoter_to_type: int = -1,
                  text_of_message_promoter_to_type:str = '',
                  previous_query: str = '',
-                 admin_permissions: dict[str, bool]=None):
+                 admin_permissions: dict[str, bool] = None):
         self.__is_admin = is_admin
         self.__is_owner = is_owner
         if admin_permissions is None:
@@ -97,7 +98,11 @@ class User(MongoDBObject):
         return self.__state
 
     @property
-    def admin_permissions(self) -> dict[str, bool]:
+    def parsed_state(self) -> State:
+        return State.parse(self.state)
+
+    @property
+    def admin_permissions(self) ->  dict[str, bool]:
         return self.__admin_permissions
 
     @property
@@ -133,8 +138,11 @@ class User(MongoDBObject):
     def state(self, state: str):
         self.__state = state
         self.collection.update_one({"id": self.id}, {"$set": {"state": state}})
-        if self.state == 'NONE':
+        if self.state == States.NONE.name:
             self.id_of_message_promoter_to_type = -1
+
+    def set_state(self, state: States, target: int | str = None):
+        self.state = State(state, str(target) if target else None).serialization
 
     @id_of_message_promoter_to_type.setter
     def id_of_message_promoter_to_type(self, id_of_message_promoter_to_type: str):
@@ -192,7 +200,17 @@ class User(MongoDBObject):
                 f'User: {self.id}')
         self.__set_field("is_admin", is_admin)
         self.__set_field('admin_permissions', self.__class__.default_admin_permissions)
-        self._is_admin = is_admin
+        self.__is_admin = is_admin
+
+    def get_info(self, for_myself: bool = False) -> str:
+        text = f'Пользователь <code>{self.id}</code>{"(Вы)" if for_myself else""}:\n\nТелефон: <code>{self.phone}</code>\nСтатус: {self.parsed_state.explanation}\nАдмин: {"✅" if self.is_admin else "❌"}' + (
+            f'\n\nПрава админа:' if self.is_admin else '')
+        if self.is_admin:
+            for permission_name, permission_text in permissions.items():
+                text += f'\n{permission_text} - {"✅" if self.admin_permissions.get(permission_name, False) else "❌"}'
+        if self.is_owner:
+            text += '\n<tg-spoiler>Абсолютные права: ✅</tg-spoiler>'
+        return text
 
     @property
     def help_message_text(self) -> str:

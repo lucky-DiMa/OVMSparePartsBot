@@ -1,7 +1,7 @@
 from asyncio import sleep
 from aiogram.enums import ContentType
 from aiogram.filters import Command, CommandObject
-from classes import User, SingleQuery, AnalogSearchResult, AccessRequest
+from classes import User, SingleQuery, AnalogSearchResult, AccessRequest, States
 from aiogram import types, F, Router
 from bot.filters import is_command, StateFilter
 from classes import MultiQuery
@@ -36,8 +36,8 @@ async def start(message: types.Message, user_exists: bool, user: User, command: 
         f'Здравствуйте {message.from_user.full_name}!\nЯ бот компании ООО "ОМ партс", которая входит в группу компаний ТД "Овоще-молочный", помогу вам с лёгкостью найти любую запчасть, если она есть в нашей базе данных!\n\n{"" if user.phone != "" else "Пожалуйста, поделись со мной своим контактом Telegram с помощью кнопки ниже, чтобы я занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер, то, к сожалению, вы не сможете использовать этого бота!"}',
         reply_markup=None if user.phone != "" else markup)
 
-    user.state = user.state if User.get_by_id(
-        message.from_user.id).phone != "" else "SENDING CONTACT"
+    if user.phone == "":
+        user.set_state(States.SENDING_CONTACT)
 
 
 # async def get_ph(message: types.Message):
@@ -67,7 +67,7 @@ async def query_message(message: types.Message, user: User):
         await message.delete()
         await msg.delete()
         return
-    user.state = 'NONE'
+    user.set_state(States.NONE)
     await message.delete()
     await bot.edit_message_text('Запрос обрабатывается, это займёт меньше минуты...', chat_id=message.from_user.id, message_id=user.id_of_message_promoter_to_type)
     match query_type:
@@ -104,7 +104,7 @@ async def query_message(message: types.Message, user: User):
 
 async def feedback(message: types.Message, user: User):
     await message.delete()
-    user.state = 'TYPING FEEDBACK'
+    user.set_state(States.TYPING_FEEDBACK)
     bot_message = await message.answer(
         'Напишите мне что вам понравилось или не понравилось во мне, а также то, чтобы вы хотели ещё от меня!\nНапишите всё в **одном сообщении**, можно даже прислать фото, например запчасти, которую вы у меня не нашли!',
         'MARKDOWN', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
@@ -114,7 +114,7 @@ async def feedback(message: types.Message, user: User):
 
 
 async def feedback_msg(message: types.Message, user: User):
-    user.state = 'NONE'
+    user.set_state(States.NONE)
     await bot.edit_message_reply_markup(chat_id=user.id, message_id=user.id_of_message_promoter_to_type)
     await message.answer('Спасибо за то, что даёте обратную связь, возможно, мы прислушаемся к вам!')
     await message.forward(-1001778865158)
@@ -132,7 +132,7 @@ async def contact(message: types.Message, user: User):
         await message.answer('Вы отправили чужой контакт!', reply_markup=markup)
         return
     user.phone = message.contact.phone_number
-    user.state = 'WAITING FOR REG CONFIRMATION'
+    user.set_state(States.WAITING_FOR_REG_CONFIRMATION)
     if not user.phone.startswith('+'):
         user.phone = '+' + user.phone
     request = AccessRequest.create(user)
@@ -161,7 +161,7 @@ async def search(message: types.Message, user: User):
     markup = query_keyboard(user, 'single')
     user.id_of_message_promoter_to_type = (
         await message.answer("Отправьте поисковой запрос!", reply_markup=markup)).message_id
-    user.state = 'TYPING QUERY single'
+    user.set_state(States.TYPING_QUERY, 'single')
     await message.delete()
 
 
@@ -262,7 +262,7 @@ async def cancel_command(message: types.Message, user: User):
         user.delete()
         await message.answer('Регистрация отменена!', reply_markup=types.ReplyKeyboardRemove())
     else:
-        user.state = 'NONE'
+        user.set_state(States.NONE)'
         await user.send_message('Действие отменено!')
     await message.delete()
 
@@ -289,12 +289,18 @@ async def waiting_for_reg_confirmation(message: types.Message):
     await message.reply('Пожалуйста дождитесь подтверждения регистрации!')
 
 
+async def my_data_command(message: types.Message, user: User):
+    await message.delete()
+    await message.answer(user.get_info(True), parse_mode='HTML')
+
+
 text_messages_router = Router(name='text_messages')
 text_messages_router.message.register(no, lambda message: message.chat.type in ['group', 'supergroup'])
 text_messages_router.message.register(start, F.text == '/start ' +  ACCESS_KEY, F.content_type == ContentType.TEXT)
 text_messages_router.message.register(no_access, lambda _, user_exists: not user_exists)
 text_messages_router.message.register(problem_with_username, lambda message: message.from_user.username is None)
 text_messages_router.message.register(cancel_command, Command('cancel'), F.content_type == ContentType.TEXT)
+text_messages_router.message.register(my_data_command, Command('my_data'), F.content_type == ContentType.TEXT)
 text_messages_router.message.register(waiting_for_reg_confirmation,
                         StateFilter('WAITING FOR REG CONFIRMATION'))
 text_messages_router.message.register(contact, StateFilter('SENDING CONTACT'),

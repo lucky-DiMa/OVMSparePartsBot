@@ -4,6 +4,7 @@ from classes.classproperty import classproperty
 
 class JsonSerializableObject:
     fields: ClassVar[dict[str, type]]
+    fields_keys: list[str]
 
     @classproperty
     def fields_keys(cls) -> list[str]:

@@ -9,6 +9,7 @@ from utils import mongo_db
 
 class MongoDBObject(JsonSerializableObject):
     collection_name: ClassVar[str]
+    collection: Collection
 
     @classproperty
     def collection(cls) -> Collection:

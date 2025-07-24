@@ -1,15 +1,14 @@
 from aiogram.enums import ChatAction
 from aiogram import types, F, Router
 
-from classes import SingleQuery, SparePart, User, Photo, Brand, SearchResult, AnalogSearchResult, AccessRequest
+from classes import User, SearchResult, AnalogSearchResult, AccessRequest, States
 from classes.access_request import ResponseException
 from classes.multiquery import MultiQuery
 from config import text_of_contacts_message
 from bot.create_bot import bot
 from bot.filters import StateFilter
 from bot.keyboards import query_keyboard
-from bot.query_utils import get_query_text
-from utils import morph
+from utils import morph, get_query_text
 
 
 # async def callback_for_search_something_btn(query: types.CallbackQuery, user: User):
@@ -65,7 +64,7 @@ async def callback_for_show_spare_part_buttons(query: types.CallbackQuery, user:
 
 
 async def callback_for_cancel_typing_query_btn(query: types.CallbackQuery, user: User):
-    user.state = 'NONE'
+    user.set_state(States.NONE)
     await query.message.edit_text('Поиск отменён!', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text='Искать запчасти!', callback_data='SEARCH')]]))
     await query.answer('Поиск отменён!')
@@ -77,7 +76,7 @@ async def callback_for_help_typing_query_btn(query: types.CallbackQuery, user: U
 
 async def callback_for_set_query_type_button(query: types.CallbackQuery, user: User):
     new_type: str = query.data.split(' ')[-1]
-    user.state = f"TYPING QUERY {new_type}"
+    user.set_state(States.TYPING_FEEDBACK)
     await query.answer()
     await query.message.edit_reply_markup(reply_markup=query_keyboard(user, new_type))
 
@@ -110,7 +109,7 @@ async def callback_for_need_new_brand_btn(query: types.CallbackQuery):
 
 
 async def callback_for_cancel_typing_feedback_btn(query: types.CallbackQuery, user: User):
-    user.state = 'NONE'
+    user.set_state(States.NONE)
     await query.answer(f'Написание сообщения обратной связи отменено!', show_alert=True)
     await query.message.delete()
 

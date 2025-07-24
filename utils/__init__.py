@@ -4,3 +4,4 @@ from .setup_morphy import morph
 from .requests_to_1c_service import RequestsTo1cService
 from .time_utils import now_time, beauty_datetime, beauty_date, today
 from .check_message_types import is_command
+from .query_utils import query_type_name, get_query_text, get_query_type

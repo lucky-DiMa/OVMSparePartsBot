@@ -1,6 +1,6 @@
 from aiogram import types
 from classes import User
-from bot.query_utils import query_type_name
+from utils import query_type_name
 
 
 def query_keyboard(user: User, type_: str) -> types.InlineKeyboardMarkup:

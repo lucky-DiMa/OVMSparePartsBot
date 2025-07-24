@@ -6,6 +6,7 @@ from typing import Any, List
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from classes import User
+from classes.states import States
 from classes.mongo_db_object import MongoDBObject
 from classes.user import PermissionDeniedException
 from bot.create_bot import bot
@@ -145,7 +146,7 @@ class AccessRequest(MongoDBObject):
         self.set_field('response_datetime', now_time_)
         self.__responder_id = responder.id
         self.set_field('responder_id', responder_id)
-        User.get_by_id(self.__user_id).state = "NONE"
+        User.get_by_id(self.__user_id).set_state(States.NONE)
 
     def reject(self, responder_id: int):
         if not self.able_to_response_to:
@@ -199,7 +200,7 @@ class AccessRequest(MongoDBObject):
         User.delete_by_id(self.__user_id)
 
     @classmethod
-    def get_by_id(cls, _id: int):
+    def get_by_id(cls, _id: int) -> AccessRequest:
         data = cls.collection.find_one({'_id': _id})
         if not data:
             raise RequestNotFoundException(f"Given ID: {_id}")
