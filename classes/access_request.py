@@ -39,7 +39,8 @@ class CancelException(Exception):
 
 class AccessRequest(MongoDBObject):
     collection_name = 'AccessRequests'
-    fields = {'user_id': int,
+    fields = {'id': int,
+              'user_id': int,
               'user_phone': str,
               'status': str,
               'creation_datetime': datetime,
@@ -119,10 +120,6 @@ class AccessRequest(MongoDBObject):
     def responder_id(self):
         return self.__responder_id
 
-    @property
-    def responder_fullname(self):
-        return self.__responder_fullname
-
     def update_last_modify_datetime(self):
         if not self.able_to_modify:
             raise ModifyException()
@@ -201,7 +198,7 @@ class AccessRequest(MongoDBObject):
 
     @classmethod
     def get_by_id(cls, _id: int) -> AccessRequest:
-        data = cls.collection.find_one({'_id': _id})
+        data = cls.collection.find_one({'id': _id})
         if not data:
             raise RequestNotFoundException(f"Given ID: {_id}")
         return cls.from_json(data)

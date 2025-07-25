@@ -1,13 +1,12 @@
-from classes import User
+from classes import User, States
 from aiogram.types import Message
 
 class StateFilter:
-    def __init__(self, checking_state: str, startswith: bool = False):
+    def __init__(self, checking_state: States):
         self.checking_state = checking_state
-        self.startswith = startswith
 
     def __call__(self, _: None = None, user: User | None = None) -> bool:
-        return user.state.startswith(self.checking_state) if self.startswith else (self.checking_state == user.state)
+        return user.parsed_state.state == self.checking_state
 
 
 def is_command(message: Message):

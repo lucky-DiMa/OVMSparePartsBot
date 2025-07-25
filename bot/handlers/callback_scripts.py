@@ -1,5 +1,6 @@
 from aiogram.enums import ChatAction
 from aiogram import types, F, Router
+from icecream import ic
 
 from classes import User, SearchResult, AnalogSearchResult, AccessRequest, States
 from classes.access_request import ResponseException
@@ -222,7 +223,7 @@ async def callback_for_accept_reg_button(query: types.CallbackQuery, user: User)
     await query.message.answer(f'Вы приняли запрос доступа к боту от <code>{reg_user.phone}</code>', parse_mode="HTML")
     await reg_user.send_message('Ваш запрос на регистрацию был принят!')
     await reg_user.send_message(
-        f'Здравствуйте {query.from_user.full_name}!\nЯ бот компании ООО "ОМ партс", которая входит в группу компаний ТД "Овоще-молочный", помогу вам с лёгкостью найти любую запчасть, если она есть в нашей базе данных!\n\n{"" if user.phone != "" else "Пожалуйста, поделись со мной своим контактом Telegram с помощью кнопки ниже, чтобы я занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер, то, к сожалению, вы не сможете использовать этого бота!"}')
+        f'Здравствуйте {(await bot.get_chat(reg_user.id)).full_name}!\nЯ бот компании ООО "ОМ партс", которая входит в группу компаний ТД "Овоще-молочный", помогу вам с лёгкостью найти любую запчасть, если она есть в нашей базе данных!')
     await bot.delete_message(reg_user.id, request_message_id)
 
 
@@ -274,7 +275,7 @@ async def callback_for_update_requests_button(query: types.CallbackQuery, user: 
 async def callback_for_view_request_buttons(query: types.CallbackQuery):
     request = AccessRequest.get_by_id(int(query.data.split()[-1]))
     try:
-        await query.message.edit_text(await request.get_info(False), reply_markup=request.responding_keyboard(),
+        await query.message.edit_text(await request.get_info(False), reply_markup=request.responding_keyboard,
                                       parse_mode='HTML')
     except:
         await query.answer("Данные обновлены")
@@ -287,18 +288,18 @@ callback_queries_router.callback_query.register(problem_with_username, lambda qu
 callback_queries_router.callback_query.register(not_registered, lambda _, user_exists: not user_exists)
 callback_queries_router.callback_query.register(send_contact, lambda _, user: user.state == 'SENDING CONTACT')
 callback_queries_router.callback_query.register(callback_for_help_typing_query_btn, F.data == 'HELP TYPING QUERY', flags={
-        'state_filter': StateFilter("TYPING QUERY", True),
+        'state_filter': StateFilter(States.TYPING_QUERY),
         "check_state_message": True,
         "state_error_message": 'Вы сейчас не отправляете запрос!'
     })
 callback_queries_router.callback_query.register(callback_for_cancel_typing_query_btn, F.data == 'CANCEL TYPING QUERY', flags={
-        'state_filter': StateFilter("TYPING QUERY", True),
+        'state_filter': StateFilter(States.TYPING_QUERY),
         "check_state_message": True,
         "state_error_message": 'Вы сейчас не отправляете запрос!'
     })
 callback_queries_router.callback_query.register(callback_for_set_query_type_button,
                            lambda query: query.data.startswith('SET_QUERY_TYPE '), flags={
-        'state_filter': StateFilter("TYPING QUERY", True),
+        'state_filter': StateFilter(States.TYPING_QUERY),
         "check_state_message": True,
         "state_error_message": 'Вы сейчас не отправляете запрос!'
     })
@@ -309,7 +310,7 @@ callback_queries_router.callback_query.register(callback_for_set_query_type_butt
 #         'state_error_message': 'Вы сейчас не отправляете запрос!'
 #     })
 callback_queries_router.callback_query.register(callback_for_cancel_typing_feedback_btn, F.data == 'CANCEL TYPING FEEDBACK', flags={
-    'state_filter': StateFilter("TYPING FEEDBACK"),
+    'state_filter': StateFilter(States.TYPING_FEEDBACK),
     "check_state_message": True,
     "state_error_message": 'Вы сейчас не отправляете сообщение обратной связи!'
 })

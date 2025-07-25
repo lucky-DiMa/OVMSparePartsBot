@@ -68,7 +68,7 @@ class User(MongoDBObject):
                  is_owner: bool = False,
                  is_admin: bool = False,
                  phone: str = '',
-                 state: str = State(States.JUST_STARTED),
+                 state: str = State(States.JUST_STARTED).serialization,
                  id_of_message_promoter_to_type: int = -1,
                  text_of_message_promoter_to_type:str = '',
                  previous_query: str = '',
@@ -138,8 +138,6 @@ class User(MongoDBObject):
     def state(self, state: str):
         self.__state = state
         self.collection.update_one({"id": self.id}, {"$set": {"state": state}})
-        if self.state == States.NONE.name:
-            self.id_of_message_promoter_to_type = -1
 
     def set_state(self, state: States, target: int | str = None):
         self.state = State(state, str(target) if target else None).serialization

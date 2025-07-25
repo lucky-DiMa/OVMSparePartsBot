@@ -32,11 +32,12 @@ async def start(message: types.Message, user_exists: bool, user: User, command: 
         return
     markup = types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text='Поделиться', request_contact=True)]],
                                        resize_keyboard=True)
-    await message.answer(
+    msg = await message.answer(
         f'Здравствуйте {message.from_user.full_name}!\nЯ бот компании ООО "ОМ партс", которая входит в группу компаний ТД "Овоще-молочный", помогу вам с лёгкостью найти любую запчасть, если она есть в нашей базе данных!\n\n{"" if user.phone != "" else "Пожалуйста, поделись со мной своим контактом Telegram с помощью кнопки ниже, чтобы я занёс ваш номер в свою базу данных, если вы не хотите чтобы я хранил ваш номер, то, к сожалению, вы не сможете использовать этого бота!"}',
         reply_markup=None if user.phone != "" else markup)
 
     if user.phone == "":
+        user.id_of_message_promoter_to_type = msg.message_id
         user.set_state(States.SENDING_CONTACT)
 
 
@@ -60,7 +61,7 @@ async def contacts(message: types.Message):
 
 
 async def query_message(message: types.Message, user: User):
-    query_type = user.state.split()[-1]
+    query_type = user.parsed_state.target
     if query_type == 'single' and len(message.text) < 4:
         msg = await message.reply('Минимальная длина запроса - 4 символа!')
         await sleep(10)
@@ -136,6 +137,7 @@ async def contact(message: types.Message, user: User):
     if not user.phone.startswith('+'):
         user.phone = '+' + user.phone
     request = AccessRequest.create(user)
+    await message.answer('Номер телефона сохранён!', reply_markup=types.ReplyKeyboardRemove())
     msg = await message.answer(await request.get_info(True),
                                      reply_markup=AccessRequest.editing_keyboard(), parse_mode='HTML')
     user.id_of_message_promoter_to_type = msg.message_id
@@ -159,8 +161,10 @@ async def search(message: types.Message, user: User):
         await message.reply(user.end_type_text)
         return
     markup = query_keyboard(user, 'single')
+    print(user.id_of_message_promoter_to_type)
     user.id_of_message_promoter_to_type = (
         await message.answer("Отправьте поисковой запрос!", reply_markup=markup)).message_id
+    print(user.id_of_message_promoter_to_type)
     user.set_state(States.TYPING_QUERY, 'single')
     await message.delete()
 
@@ -262,7 +266,7 @@ async def cancel_command(message: types.Message, user: User):
         user.delete()
         await message.answer('Регистрация отменена!', reply_markup=types.ReplyKeyboardRemove())
     else:
-        user.set_state(States.NONE)'
+        user.set_state(States.NONE)
         await user.send_message('Действие отменено!')
     await message.delete()
 
@@ -302,12 +306,12 @@ text_messages_router.message.register(problem_with_username, lambda message: mes
 text_messages_router.message.register(cancel_command, Command('cancel'), F.content_type == ContentType.TEXT)
 text_messages_router.message.register(my_data_command, Command('my_data'), F.content_type == ContentType.TEXT)
 text_messages_router.message.register(waiting_for_reg_confirmation,
-                        StateFilter('WAITING FOR REG CONFIRMATION'))
-text_messages_router.message.register(contact, StateFilter('SENDING CONTACT'),
+                        StateFilter(States.WAITING_FOR_REG_CONFIRMATION))
+text_messages_router.message.register(contact, StateFilter(States.SENDING_CONTACT),
                     F.content_type.in_([ContentType.TEXT, ContentType.CONTACT]))
-text_messages_router.message.register(query_message, StateFilter('TYPING QUERY', True),
+text_messages_router.message.register(query_message, StateFilter(States.TYPING_QUERY),
                     F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
-text_messages_router.message.register(feedback_msg, StateFilter('TYPING FEEDBACK'),
+text_messages_router.message.register(feedback_msg, StateFilter(States.TYPING_FEEDBACK),
                     F.content_type.in_([ContentType.TEXT, ContentType.PHOTO]))
 text_messages_router.message.register(start, Command('start'), F.content_type == ContentType.TEXT)
 text_messages_router.message.register(help_command, Command('help'), F.content_type == ContentType.TEXT)

@@ -71,7 +71,7 @@ class SearchResult(RedisObject):
     def sp_pages_of_brand_keyboard(self, brand_n: int, page_n: int) -> types.InlineKeyboardMarkup:
         inline_kb = []
         for i, sp in enumerate(self.get_sp_page_of_brand(brand_n, page_n)):
-            inline_kb.append([types.InlineKeyboardButton(text=sp.name[:min(20, len(sp.name))] + ('...' if len(sp.name) > 20 else '') + f" ({sp.count} шт.)", callback_data=f'SHOW SP {brand_n} {page_n * 10 + i}')])
+            inline_kb.append([types.InlineKeyboardButton(text=sp.name[:min(30, len(sp.name))] + ('...' if len(sp.name) > 30 else '') + f" ({sp.count} шт.)", callback_data=f'SHOW SP {brand_n} {page_n * 10 + i}')])
         if self.pages_count_of_brand(brand_n) > 1:
             inline_kb.append([
                 types.InlineKeyboardButton(text='<<', callback_data=f'GOTO SP PAGE {page_n - 1} {brand_n}'),

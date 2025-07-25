@@ -1,6 +1,5 @@
 import os
 from dotenv import dotenv_values
-from pkg_resources import set_extraction_path
 
 # Get the absolute path to the directory containing this config.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
