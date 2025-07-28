@@ -51,7 +51,7 @@ class JsonSerializableObject:
         res: dict_type = {}
         for key, obj in json_dict.items():
             res[key] = JsonSerializableObject.obj_from_json(t, obj)
-        return res
+        return dict_type(res)
 
     @staticmethod
     def obj_from_json[T](cls: type[T], json_obj: dict[str, Any] | list[Any] | T) -> T:

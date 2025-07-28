@@ -6,7 +6,7 @@ from classes import User, SearchResult, AnalogSearchResult, AccessRequest, State
 from classes.access_request import ResponseException
 from classes.multiquery import MultiQuery
 from config import text_of_contacts_message
-from bot.create_bot import bot
+from bot.create_bot import bot, dp
 from bot.filters import StateFilter
 from bot.keyboards import query_keyboard
 from utils import morph, get_query_text
@@ -207,7 +207,7 @@ async def callback_for_export_mq_to_excel_button(query: types.CallbackQuery, use
     await mq.export_results_to_excel()
     await query.message.answer_document(types.FSInputFile('result.xlsx',
                                                           f'Мультизапрос #{mq._id}.xlsx'))
-
+@dp.message()
 async def callback_for_accept_reg_button(query: types.CallbackQuery, user: User):
     request = AccessRequest.get_by_id(int(query.data.split()[-1]))
     request_message_id = User.get_by_id(request.user_id).id_of_message_promoter_to_type

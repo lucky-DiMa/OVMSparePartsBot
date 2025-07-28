@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import NamedTuple, AnyStr, Any
+import functools
+from typing import NamedTuple, Any, Callable, Concatenate
 
 from aiogram import types
+from typing_extensions import ParamSpec
 
-from bot.admin_permissions import permissions
+from classes.admin_permissions import AdminPermissions, AdminPermissionsDict
 from classes.states import State, States
 from classes.mongo_db_object import MongoDBObject
 from config import MANUAL_URL
@@ -56,13 +58,22 @@ class PermissionAlreadyRestrictedException(AlreadyDoneException):
 class BannedUserNotFoundException(Exception):
     """Banned User with given id not found"""
 
+def check_permission(permission_name: str):
+    def decorator[P: ParamSpec, R](func: Callable[[User, P], R]) -> Callable[[User, P], R]:
+        @functools.wraps(func)
+        def wrapper(user: User, *args: Any, **kwargs: Any):
+            print('check_permission', permission_name)
+            return func(user, *args, **kwargs)
+        return wrapper
+    return decorator
+
 class User(MongoDBObject):
     fields = {"id": int, 'is_owner': bool, 'is_admin': bool, "phone": str, "state": str, "id_of_message_promoter_to_type": str, 'text_of_message_promoter_to_type': str,
-              'previous_query': str, 'admin_permissions': dict[str, bool]}
+              'previous_query': str, 'admin_permissions': AdminPermissionsDict}
     collection_name = 'Users'
     
-    full_admin_permissions = {permission_name: True for permission_name in permissions.keys()}
-    default_admin_permissions = {permission_name: False for permission_name in permissions.keys()}
+    full_admin_permissions = AdminPermissionsDict({permission.name: True for permission in AdminPermissions.permissions_list})
+    default_admin_permissions = AdminPermissionsDict({permission.name: False for permission in AdminPermissions.permissions_list})
 
     def __init__(self, tg_id: int,
                  is_owner: bool = False,
@@ -72,7 +83,7 @@ class User(MongoDBObject):
                  id_of_message_promoter_to_type: int = -1,
                  text_of_message_promoter_to_type:str = '',
                  previous_query: str = '',
-                 admin_permissions: dict[str, bool] = None):
+                 admin_permissions: AdminPermissionsDict = None):
         self.__is_admin = is_admin
         self.__is_owner = is_owner
         if admin_permissions is None:
@@ -244,19 +255,8 @@ class User(MongoDBObject):
         await bot.send_media_group(self.id, media_list,
                                    reply_to_message_id=reply_to_message_id)
 
+    @check_permission('choose_admins')
     def allow_permission(self, user_id: int, permission_name: str):
-        if not self.is_owner:
-            if not self.is_admin:
-                raise PermissionDeniedException(
-                    f'User: {self.id}. Permission: choose_admins. Reason: user is not admin.')
-            if not self.is_allowed('choose_admins'):
-                raise PermissionDeniedException(
-                    f'User: {self.id}. Permission: choose_admins. Reason: user is admin but have not this permission')
-            if not self.is_higher(user_id):
-                raise PermissionDeniedException(
-                    f'User: {self.id}. Permission: choose_admins. Reason: user is admin and have this permission but he is lower than user {user_id}')
-            if permission_name == 'choose_admins':
-                raise PermissionDeniedException(f'User: {self.id}. Permission: choose_admins. Reason: user is admin and have this permission but he is not owner and can not allow someone to choose admins.')
         user = User.get_by_id(user_id)
         if not user.is_admin:
             raise CantEditAdminPermissionOfNonAdminUserException(f'User: "{user.fullname}" {user.id}')
@@ -402,3 +402,7 @@ class User(MongoDBObject):
 
     async def delete_state_message(self):
         await bot.delete_message(self.id, self.id_of_message_promoter_to_type)
+
+if __name__ == "__main__":
+    T = AdminPermissionsDict
+    print(type(User.get_by_id(1358414277).admin_permissions))
