@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from classes import User
 from classes.states import States
-from classes.mongo_db_object import MongoDBObject
+from classes.mongo_db_object import MongoDBModel
 from classes.user import PermissionDeniedException
 from bot.create_bot import bot
 from utils import get_next_id, now_time, beauty_datetime
@@ -37,8 +37,8 @@ class CancelException(Exception):
     """You cannot cancel this request now"""
 
 
-class AccessRequest(MongoDBObject):
-    collection_name = 'AccessRequests'
+class AccessRequest(MongoDBModel):
+    _collection_name = 'AccessRequests'
     fields = {'id': int,
               'user_id': int,
               'user_phone': str,
@@ -83,7 +83,7 @@ class AccessRequest(MongoDBObject):
 
     @classmethod
     def set_field_by_id(cls, _id: int, field: str, value: Any):
-        cls.collection.update_one({'_id': _id}, {'$set': {field: value}})
+        cls._collection.update_one({'_id': _id}, {'$set': {field: value}})
 
     def set_field(self, field: str, value: Any):
         self.__class__.set_field_by_id(self.__id, field, value)
@@ -198,23 +198,23 @@ class AccessRequest(MongoDBObject):
 
     @classmethod
     def get_by_id(cls, _id: int) -> AccessRequest:
-        data = cls.collection.find_one({'id': _id})
+        data = cls._collection.find_one({'id': _id})
         if not data:
             raise RequestNotFoundException(f"Given ID: {_id}")
         return cls.from_json(data)
 
     @classmethod
     def get_all(cls) -> List[AccessRequest] | list:
-        return list(map(cls.from_json, cls.collection.find()))
+        return list(map(cls.from_json, cls._collection.find()))
 
     @classmethod
     def get_waiting(cls) -> List[AccessRequest] | list:
-        return list(map(cls.from_json, cls.collection.find({"status": AccessRequestStatuses.waiting.name})))
+        return list(map(cls.from_json, cls._collection.find({"status": AccessRequestStatuses.waiting.name})))
 
     @classmethod
     def get_waiting_by_user_id(cls, user_id: int) -> AccessRequest | None:
         return cls.from_json(
-            cls.collection.find_one({"user_id": user_id, "status": AccessRequestStatuses.waiting.name}))
+            cls._collection.find_one({"user_id": user_id, "status": AccessRequestStatuses.waiting.name}))
 
     # @classmethod
     # def get_latest_by_user_id(cls, user_id: int) -> AccessRequest | None:
@@ -223,13 +223,13 @@ class AccessRequest(MongoDBObject):
 
     @classmethod
     def next_id(cls) -> int:
-        return get_next_id(cls.collection.name)
+        return get_next_id(cls._collection.name)
 
     @classmethod
     def create(cls, user: User) -> AccessRequest:
         request = AccessRequest(cls.next_id(), user.id, user.phone,
                                 AccessRequestStatuses.waiting.name, now_time())
-        cls.collection.insert_one(request.to_json())
+        cls._collection.insert_one(request.to_json())
         return request
 
     @property

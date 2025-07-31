@@ -4,15 +4,15 @@ from datetime import datetime, UTC
 
 from aiogram import types
 
-from classes.mongo_db_object import MongoDBObject
+from classes.mongo_db_object import MongoDBModel
 from classes.search_result import SearchResult
 
 from openpyxl.workbook import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 
 
-class MultiQuery(MongoDBObject):
-    collection_name = 'Queries'
+class MultiQuery(MongoDBModel):
+    _collection_name = 'Queries'
     fields = {'_id': int, 'from_user_id': int, 'texts': list[str], 'datetime': datetime, "type": str}
     def __init__(self, _id: int,
                  from_user_id: int,
@@ -59,28 +59,28 @@ class MultiQuery(MongoDBObject):
     @classmethod
     def create(cls, from_user_id: int, query_texts: list[str], type_: str = 'multi') -> MultiQuery:
         query = cls(cls.get_max_id() + 1, from_user_id, query_texts, datetime.now(UTC), type_)
-        cls.collection.insert_one(query.to_json())
+        cls._collection.insert_one(query.to_json())
         return cls.from_json(query.to_json())
 
     @classmethod
     def get_by_id(cls, _id: int) -> MultiQuery:
-        return cls.from_json(cls.collection.find_one({"_id": _id}, cls.fields_keys))
+        return cls.from_json(cls._collection.find_one({"_id": _id}, cls.fields_keys))
 
     @classmethod
     def delete_all(cls) -> None:
-        cls.collection.drop()
+        cls._collection.drop()
 
     @classmethod
     def get_max_id(cls) -> int:
         try:
-            return list(cls.collection.find({}, ['_id']).sort('_id', -1))[0]['_id']
+            return list(cls._collection.find({}, ['_id']).sort('_id', -1))[0]['_id']
         except IndexError:
             return -1
 
     @classmethod
     def get_all(cls) -> list[MultiQuery]:
         res = []
-        for q_dict in cls.collection.find({}):
+        for q_dict in cls._collection.find({}):
             res.append(cls.from_json(q_dict))
         return res
 

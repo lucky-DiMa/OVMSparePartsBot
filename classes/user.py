@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import functools
-from typing import NamedTuple, Any, Callable, Concatenate
+from contextlib import contextmanager
+from typing import NamedTuple, Any, Callable, Concatenate, ClassVar
 
 from aiogram import types
+from pydantic import Field
 from typing_extensions import ParamSpec
 
 from classes.admin_permissions import AdminPermissions, AdminPermissionsDict
 from classes.states import State, States
-from classes.mongo_db_object import MongoDBObject
+from classes.mongo_db_object import MongoDBModel
 from config import MANUAL_URL
 from bot import bot
 from utils import mongo_db
@@ -61,112 +63,49 @@ class BannedUserNotFoundException(Exception):
 def check_permission(permission_name: str):
     def decorator[P: ParamSpec, R](func: Callable[[User, P], R]) -> Callable[[User, P], R]:
         @functools.wraps(func)
-        def wrapper(user: User, *args: Any, **kwargs: Any):
-            print('check_permission', permission_name)
+        def wrapper(self: User, *args: Any, **kwargs: Any):
+            if not self.is_owner:
+                if not self.is_admin:
+                    raise PermissionDeniedException(
+                        f'User: {self.id}. Permission: choose_admins. Reason: user is not admin.')
+                if not self.is_allowed('choose_admins'):
+                    raise PermissionDeniedException(
+                        f'User: {self.id}. Permission: choose_admins. Reason: user is admin but have not this permission')
+                if not self.is_higher(user_id):
+                    raise PermissionDeniedException(
+                        f'User: {self.id}. Permission: /ban. Reason: user is admin and have this permission but he is lower than user {user_id}')
+                if permission_name == 'choose_admins':
+                    raise PermissionDeniedException(
+                        f'User: {self.id}. Permission: choose_admins. Reason: user is admin and have this permission but he is not owner and can not allow someone to choose admins.')
             return func(user, *args, **kwargs)
         return wrapper
     return decorator
 
-class User(MongoDBObject):
-    fields = {"id": int, 'is_owner': bool, 'is_admin': bool, "phone": str, "state": str, "id_of_message_promoter_to_type": str, 'text_of_message_promoter_to_type': str,
-              'previous_query': str, 'admin_permissions': AdminPermissionsDict}
-    collection_name = 'Users'
+class User(MongoDBModel):
+    _collection_name = 'Users'
     
-    full_admin_permissions = AdminPermissionsDict({permission.name: True for permission in AdminPermissions.permissions_list})
-    default_admin_permissions = AdminPermissionsDict({permission.name: False for permission in AdminPermissions.permissions_list})
+    _full_admin_permissions: ClassVar[dict[str, bool]] = AdminPermissionsDict({permission.name: True for permission in AdminPermissions.permissions_list})
+    _default_admin_permissions: ClassVar[dict[str, bool]] = AdminPermissionsDict({permission.name: False for permission in AdminPermissions.permissions_list})
 
-    def __init__(self, tg_id: int,
-                 is_owner: bool = False,
-                 is_admin: bool = False,
-                 phone: str = '',
-                 state: str = State(States.JUST_STARTED).serialization,
-                 id_of_message_promoter_to_type: int = -1,
-                 text_of_message_promoter_to_type:str = '',
-                 previous_query: str = '',
-                 admin_permissions: AdminPermissionsDict = None):
-        self.__is_admin = is_admin
-        self.__is_owner = is_owner
-        if admin_permissions is None:
-            admin_permissions = {}
-        self.__id = tg_id
-        self.__phone = phone
-        self.__state = state
-        self.__id_of_message_promoter_to_type = id_of_message_promoter_to_type
-        self.__text_of_message_promoter_to_type = text_of_message_promoter_to_type
-        self.__previous_query = previous_query
-        self.__admin_permissions = admin_permissions
+    id: int
+    phone: str = Field(default="")
+    state: str = Field(default=States.JUST_STARTED.name)
+    is_admin: bool = Field(default=False)
+    admin_permissions: AdminPermissionsDict = Field(default={})
+    is_owner: bool = Field(default=False)
+    previous_query: str = Field(default="")
+    id_of_message_promoter_to_type: int | None = Field(default=None)
+    text_of_message_promoter_to_type: str | None = Field(default=None)
 
-    @property
-    def id(self) -> int:
-        return self.__id
-
-    @property
-    def phone(self) -> str:
-        return self.__phone
-
-    @property
-    def state(self) -> str:
-        return self.__state
-
-    @property
-    def parsed_state(self) -> State:
-        return State.parse(self.state)
-
-    @property
-    def admin_permissions(self) ->  dict[str, bool]:
-        return self.__admin_permissions
-
-    @property
-    def id_of_message_promoter_to_type(self) -> int:
-        return self.__id_of_message_promoter_to_type
-
-    @property
-    def text_of_message_promoter_to_type(self) -> str:
-        return self.__text_of_message_promoter_to_type
-
-    @property
-    def previous_query(self) -> str:
-        return self.__previous_query
-
-    @property
-    def is_owner(self) -> bool:
-        return self.__is_owner
-
-    @property
-    def is_admin(self) -> bool:
-        return self.__is_admin
+    def __get_mongo_object_filter__(self):
+        return {'id': self.id}
 
     @property
     def end_type_text(self) -> str:
         return "NONE" if self.state == 'NONE' else 'Сначала отправьте поисковой запрос!' if self.state == "TYPING QUERY" else "Сначала отправьте сообщение обратной связи!" if self.state == 'TYPING FEEDBACK' else 'Сначала поделитесь своим контактом!'
 
-    @phone.setter
-    def phone(self, phone: str):
-        self.__phone = phone
-        self.collection.update_one({"id": self.id}, {"$set": {"phone": phone}})
-
-    @state.setter
-    def state(self, state: str):
-        self.__state = state
-        self.collection.update_one({"id": self.id}, {"$set": {"state": state}})
-
     def set_state(self, state: States, target: int | str = None):
         self.state = State(state, str(target) if target else None).serialization
-
-    @id_of_message_promoter_to_type.setter
-    def id_of_message_promoter_to_type(self, id_of_message_promoter_to_type: str):
-        self.__id_of_message_promoter_to_type = id_of_message_promoter_to_type
-        self.collection.update_one({"id": self.id}, {"$set": {"id_of_message_promoter_to_type": id_of_message_promoter_to_type}})
-
-    @text_of_message_promoter_to_type.setter
-    def text_of_message_promoter_to_type(self, text_of_message_promoter_to_type: str):
-        self.__text_of_message_promoter_to_type = text_of_message_promoter_to_type
-        self.collection.update_one({"id": self.id}, {"$set": {"text_of_message_promoter_to_type": text_of_message_promoter_to_type}})
-
-    @previous_query.setter
-    def previous_query(self, previous_query: str):
-        self.__previous_query = previous_query
-        self.collection.update_one({"id": self.id}, {"$set": {"previous_query": previous_query}})
 
     def is_allowed(self, permission_name: str):
         return self.is_owner or (self.is_admin and self.__admin_permissions[permission_name])
@@ -174,42 +113,29 @@ class User(MongoDBObject):
     @classmethod
     def reg(cls, tg_id: int) -> User:
         if (user := cls.get_by_id(tg_id)) is None:
-            user = User(tg_id)
-            cls.collection.insert_one(user.to_json())
-            return user
+            user = User(id=tg_id)
+            cls.insert_one(user)
         return user
+
 
     @classmethod
     def get_by_id(cls, tg_id: int) -> User | None:
-        user_dict = cls.collection.find_one({"id": tg_id})
-        if user_dict is None:
-            return None
-        return cls.from_json(user_dict)
+        return cls.get_one_from_mongo({"id": tg_id})
 
     def delete(self):
         self.__class__.delete_by_id(self.id)
 
     @classmethod
     def delete_by_id(cls, tg_id: int):
-        cls.collection.delete_one({"id": tg_id})
+        cls._collection.delete_one({"id": tg_id})
         
     @classmethod
     def delete_all(cls):
-        cls.collection.drop()
+        cls._collection.drop()
 
     @classmethod
     def exists_by_id(cls, tg_id: int):
-        return cls.collection.find_one({"id": tg_id}) is not None
-
-    @is_admin.setter
-    def is_admin(self, is_admin: bool):
-        if self.__is_admin is is_admin:
-            raise AdminAlreadyPromotedException(
-                f'User: {self.id}') if is_admin else AdminAlreadyDismissedException(
-                f'User: {self.id}')
-        self.__set_field("is_admin", is_admin)
-        self.__set_field('admin_permissions', self.__class__.default_admin_permissions)
-        self.__is_admin = is_admin
+        return cls._collection.find_one({"id": tg_id}) is not None
 
     def get_info(self, for_myself: bool = False) -> str:
         text = f'Пользователь <code>{self.id}</code>{"(Вы)" if for_myself else""}:\n\nТелефон: <code>{self.phone}</code>\nСтатус: {self.parsed_state.explanation}\nАдмин: {"✅" if self.is_admin else "❌"}' + (
@@ -369,11 +295,11 @@ class User(MongoDBObject):
         user.is_admin = False
 
     def __set_field(self, field: str, value: Any):
-        self.collection.update_one({'id': self.id}, {'$set': {field: value}})
+        self._collection.update_one({'id': self.id}, {'$set': {field: value}})
 
     @classmethod
     def __set_field_by_id(cls, _id: int, field: str, value: Any):
-        cls.collection.update_one({"id": _id}, {"$set": {field: value}})
+        cls._collection.update_one({"id": _id}, {"$set": {field: value}})
 
     @classmethod
     def ban_by_id(cls, tg_id: int):
@@ -398,11 +324,13 @@ class User(MongoDBObject):
 
     @classmethod
     def get_responders(cls) -> list[User] | list:
-        return list(map(cls.from_json, cls.collection.find({"admin_permissions.responder": True})))
+        return list(map(cls.from_json, cls._collection.find({"admin_permissions.responder": True})))
 
     async def delete_state_message(self):
         await bot.delete_message(self.id, self.id_of_message_promoter_to_type)
 
+
+        
+
 if __name__ == "__main__":
-    T = AdminPermissionsDict
-    print(type(User.get_by_id(1358414277).admin_permissions))
+    User(id=1358414277).admin_permissions[AdminPermissions.choose_admins] = True
